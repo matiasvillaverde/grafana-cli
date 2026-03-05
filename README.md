@@ -14,6 +14,34 @@ Most Grafana tooling is human-first. This CLI is designed for **agents** that ne
 - create dashboards programmatically
 - run deterministic workflows with low token usage
 
+## Motivation: CLI First For Agents
+
+This project is about **context engineering** for observability workflows.
+
+For this use case, a focused CLI is often better than generic MCP interactions:
+
+- CLI commands return narrow, task-specific JSON instead of broad tool schemas and verbose context.
+- Agents can request only the fields they need (`--fields`) to reduce token usage.
+- Command contracts are stable and deterministic, which improves reliability in long agent loops.
+- Execution is composable in scripts/CI, so agents can chain investigation steps with minimal prompt overhead.
+
+MCP is still useful as an integration layer, but this CLI is the optimized execution surface for high-frequency Grafana agent tasks.
+
+## Built For Codex And Claude Code
+
+Engineers can instruct Codex or Claude Code to call this CLI directly to:
+
+- debug incidents across metrics, logs, and traces
+- inspect and reason about dashboards and datasources
+- query Grafana Assistant for guided investigation
+- automate dashboard creation and remediation playbooks
+
+Example instruction to an agent:
+
+```text
+Use grafana-cli to investigate a latency spike in checkout, summarize only key metrics/log streams/trace matches, and propose a dashboard update.
+```
+
 ## Agent-First Contract
 
 - **Compact JSON by default** (`--output json` implied)
