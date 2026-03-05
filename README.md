@@ -6,7 +6,11 @@ This project is a **WIP hackathon build by @matiasvillaverde and @marctc**.
 
 ## Why This Exists
 
-Most Grafana tooling is human-first. This CLI is designed for **agents** that need to:
+Grafana is one of the most important systems engineers use to understand production. But most Grafana workflows are still human-first: dashboards, clicks, long API payloads, and broad UI context.
+
+Agents need a different interface. This CLI gives Grafana a small, deterministic execution surface that an agent can use repeatedly during incident response and debugging.
+
+This matters when an engineer is working with Codex or Claude Code and wants the agent to:
 
 - understand and triage incidents
 - query logs/metrics/traces fast
@@ -14,18 +18,18 @@ Most Grafana tooling is human-first. This CLI is designed for **agents** that ne
 - create dashboards programmatically
 - run deterministic workflows with low token usage
 
-## Motivation: CLI First For Agents
+## Why A CLI Matters For Agents
 
 This project is about **context engineering** for observability workflows.
 
-For this use case, a focused CLI is often better than generic MCP interactions:
+For Grafana tasks, a focused CLI is often better than a generic tool layer:
 
 - CLI commands return narrow, task-specific JSON instead of broad tool schemas and verbose context.
 - Agents can request only the fields they need (`--fields`) to reduce token usage.
 - Command contracts are stable and deterministic, which improves reliability in long agent loops.
 - Execution is composable in scripts/CI, so agents can chain investigation steps with minimal prompt overhead.
 
-MCP is still useful as an integration layer, but this CLI is the optimized execution surface for high-frequency Grafana agent tasks.
+MCP is still useful as an integration layer, but it is often too wide for repeated debugging loops. The goal here is to make Grafana itself **agent-first**.
 
 ## Built For Codex And Claude Code
 
@@ -144,17 +148,16 @@ Based on current Grafana product/docs research, this CLI targets:
   - Asserts
   - OnCall
 
-## Design Inspiration
+## CLI Design Principles
 
-This README and CLI structure were informed by strong open-source CLI patterns from:
+The design goal is straightforward:
 
-- `cli/cli` (GitHub CLI)
-- `cloudflare/workers-sdk` (`wrangler`)
-- `supabase/cli`
-- `vercel/vercel` (CLI package)
-- `Aider-AI/aider`
+- explicit commands for high-frequency Grafana workflows
+- non-interactive execution for agents and CI
+- compact structured output by default
+- a raw API escape hatch for full product coverage
 
-We borrowed patterns around command discoverability, non-interactive execution, stable JSON outputs, and strong automation ergonomics.
+The point is not to copy other CLIs. The point is to give agents the shortest, most reliable path to understand and operate Grafana.
 
 ## Quality Gate
 

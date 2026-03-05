@@ -2,6 +2,14 @@
 
 Thanks for contributing. This project is agent-first and quality-gated.
 
+## Why This Project Exists
+
+`grafana-cli` exists to give agents a deterministic, low-token interface to Grafana and Grafana Cloud.
+
+Engineers using Codex or Claude Code should be able to ask an agent to investigate incidents, inspect dashboards, query logs, or create dashboards without forcing the agent through broad UI flows or verbose tool interactions.
+
+That requirement drives the engineering bar in this repository: stable command contracts, compact JSON output, strict linting, and complete test coverage.
+
 ## Core Quality Requirements
 
 Every PR must pass:
@@ -10,7 +18,7 @@ Every PR must pass:
 - full test suite
 - **100% statement coverage** across the repository
 
-If a change cannot realistically hit 100% coverage, split/refactor the change until it can.
+If a change cannot realistically hit `100.0%` coverage, split or refactor the change until it can.
 
 ## Local Setup
 
@@ -48,6 +56,8 @@ total: ... 100.0%
 - Keep command flags explicit and backward-compatible.
 - Add/adjust tests in the same PR as behavior changes.
 - Do not reduce lint strictness or coverage gates.
+- Treat token efficiency as a product requirement, not an optimization pass.
+- Avoid adding command behavior that is convenient for humans but ambiguous for agents.
 
 ## Commit And PR Guidelines
 
