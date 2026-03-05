@@ -1,0 +1,29 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Test with coverage
+        run: go test ./... -covermode=atomic -coverprofile=coverage.out
+
+      - name: Enforce 100% coverage
+        run: |
+          total=$(go tool cover -func=coverage.out | awk '/^total:/ {print $3}')
+          echo "Total coverage: ${total}"
+          if [ "${total}" != "100.0%" ]; then
+            echo "Coverage gate failed: expected 100.0%, got ${total}"
+            exit 1
+          fi
