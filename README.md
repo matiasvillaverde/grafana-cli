@@ -191,3 +191,5 @@ Example:
 See [docs/architecture.md](docs/architecture.md).
 
 Research references: [docs/product-research.md](docs/product-research.md).
+
+Contribution guide: [CONTRIBUTING.md](CONTRIBUTING.md).
