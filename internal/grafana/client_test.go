@@ -172,7 +172,7 @@ func TestClientDomainMethods(t *testing.T) {
 }
 
 func TestClientMissingRuntimeURLs(t *testing.T) {
-	client := NewClient(config.Config{BaseURL: "https://grafana.com"}, doerFunc(func(r *http.Request) (*http.Response, error) {
+	client := NewClient(config.Config{BaseURL: "https://grafana.com"}, doerFunc(func(_ *http.Request) (*http.Response, error) {
 		return nil, errors.New("should not call")
 	}))
 
@@ -188,7 +188,7 @@ func TestClientMissingRuntimeURLs(t *testing.T) {
 }
 
 func TestClientMissingBaseURLPaths(t *testing.T) {
-	client := &Client{cfg: config.Config{}, doer: doerFunc(func(r *http.Request) (*http.Response, error) {
+	client := &Client{cfg: config.Config{}, doer: doerFunc(func(_ *http.Request) (*http.Response, error) {
 		return nil, errors.New("should not call")
 	})}
 

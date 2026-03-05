@@ -7,12 +7,14 @@ linters:
     - bodyclose
     - copyloopvar
     - errcheck
+    - gocritic
     - gofmt
     - goimports
     - govet
     - ineffassign
     - misspell
     - noctx
+    - revive
     - staticcheck
     - unconvert
     - unused

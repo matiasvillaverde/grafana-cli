@@ -769,7 +769,7 @@ func summarizeSnapshot(snapshot grafana.AggregateSnapshot) map[string]any {
 	return map[string]any{
 		"metrics_series": countPath(snapshot.Metrics, "data", "result"),
 		"log_streams":    countPath(snapshot.Logs, "data", "result"),
-		"trace_matches":  max(countPath(snapshot.Traces, "traces"), countPath(snapshot.Traces, "data", "traces")),
+		"trace_matches":  maxInt(countPath(snapshot.Traces, "traces"), countPath(snapshot.Traces, "data", "traces")),
 	}
 }
 
@@ -845,7 +845,7 @@ func lookupPath(input map[string]any, path []string) (any, bool) {
 	return current, true
 }
 
-func max(a, b int) int {
+func maxInt(a, b int) int {
 	if a > b {
 		return a
 	}

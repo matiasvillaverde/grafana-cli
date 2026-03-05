@@ -937,7 +937,7 @@ func TestHelpers(t *testing.T) {
 	if _, ok := lookupPath(map[string]any{"a": 1}, []string{"a", "b"}); ok {
 		t.Fatalf("lookupPath should fail")
 	}
-	if max(3, 2) != 3 || max(1, 2) != 2 {
+	if maxInt(3, 2) != 3 || maxInt(1, 2) != 2 {
 		t.Fatalf("unexpected max results")
 	}
 	if parseInt("10", 5) != 10 || parseInt("bad", 5) != 5 {
