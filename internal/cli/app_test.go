@@ -408,6 +408,24 @@ func decodeJSONArray(t *testing.T, value string) []map[string]any {
 	return out
 }
 
+type discoveryHelpCase struct {
+	path    []string
+	command discoveryCommand
+}
+
+func flattenDiscoveryPaths(commands []discoveryCommand, prefix []string) []discoveryHelpCase {
+	cases := make([]discoveryHelpCase, 0, len(commands))
+	for _, command := range commands {
+		path := append(append([]string{}, prefix...), command.Name)
+		cases = append(cases, discoveryHelpCase{
+			path:    path,
+			command: command,
+		})
+		cases = append(cases, flattenDiscoveryPaths(command.Subcommands, path)...)
+	}
+	return cases
+}
+
 func findCommandByName(t *testing.T, commands []any, name string) map[string]any {
 	t.Helper()
 	for _, command := range commands {
@@ -1168,8 +1186,20 @@ func TestSchemaCommandAndNestedHelp(t *testing.T) {
 	if command["name"] != "query" {
 		t.Fatalf("expected leaf command metadata, got %+v", command)
 	}
+	if strings.TrimSpace(command["output_shape"].(string)) == "" {
+		t.Fatalf("expected leaf help to include output shape, got %+v", command)
+	}
+	if examples, ok := command["examples"].([]any); !ok || len(examples) == 0 {
+		t.Fatalf("expected leaf help to include examples, got %+v", command)
+	}
+	if related, ok := command["related_commands"].([]any); !ok || len(related) == 0 {
+		t.Fatalf("expected leaf help to include related commands, got %+v", command)
+	}
 	if _, ok := leaf["query_syntax"].(map[string]any)["metrics"]; !ok {
 		t.Fatalf("expected metrics query syntax in leaf help")
+	}
+	if _, ok := leaf["best_practices"].([]any); !ok {
+		t.Fatalf("expected leaf help to expand best practices, got %+v", leaf)
 	}
 
 	if code := app.Run(context.Background(), []string{"schema", "--bad"}); code != 1 {
@@ -1212,6 +1242,87 @@ func TestDiscoveryHelpers(t *testing.T) {
 	}
 	if workflows := discoveryWorkflows([]string{"dashboards"}); workflows != nil {
 		t.Fatalf("expected no workflows for unrelated discovery scope, got %+v", workflows)
+	}
+	if !helpCompactForPath(nil) {
+		t.Fatalf("expected root help to stay compact")
+	}
+	if !helpCompactForPath([]string{"runtime"}) {
+		t.Fatalf("expected grouped help to stay compact")
+	}
+	if helpCompactForPath([]string{"runtime", "metrics", "query"}) {
+		t.Fatalf("expected leaf help to expand")
+	}
+	if helpCompactForPath([]string{"api"}) {
+		t.Fatalf("expected top-level leaf help to expand")
+	}
+	if !helpCompactForPath([]string{"missing"}) {
+		t.Fatalf("expected unknown help path to stay compact")
+	}
+}
+
+func TestEveryDiscoveryHelpPathIsSelfDescribing(t *testing.T) {
+	store := &fakeContextStore{}
+	app := NewApp(store)
+	var out, errOut strings.Builder
+	app.Out = &out
+	app.Err = &errOut
+
+	for _, tc := range flattenDiscoveryPaths(discoveryCatalog(), nil) {
+		t.Run(strings.Join(tc.path, " "), func(t *testing.T) {
+			out.Reset()
+			errOut.Reset()
+
+			args := append(append([]string{}, tc.path...), "--help")
+			if code := app.Run(context.Background(), args); code != 0 {
+				t.Fatalf("expected help to succeed for %v: %s", args, errOut.String())
+			}
+
+			payload := decodeJSON(t, out.String())
+			if payload["scope"] != strings.Join(tc.path, " ") {
+				t.Fatalf("expected help scope %q, got %+v", strings.Join(tc.path, " "), payload)
+			}
+
+			commands, ok := payload["commands"].([]any)
+			if !ok || len(commands) != 1 {
+				t.Fatalf("expected one command payload for %v, got %+v", tc.path, payload["commands"])
+			}
+
+			command, ok := commands[0].(map[string]any)
+			if !ok {
+				t.Fatalf("expected command map for %v, got %#v", tc.path, commands[0])
+			}
+			if command["name"] != tc.command.Name {
+				t.Fatalf("expected command name %q, got %+v", tc.command.Name, command)
+			}
+			if strings.TrimSpace(command["description"].(string)) == "" {
+				t.Fatalf("expected description for %v, got %+v", tc.path, command)
+			}
+
+			if len(tc.command.Subcommands) == 0 {
+				if strings.TrimSpace(command["output_shape"].(string)) == "" {
+					t.Fatalf("expected output shape for leaf help %v, got %+v", tc.path, command)
+				}
+				examples, ok := command["examples"].([]any)
+				if !ok || len(examples) == 0 {
+					t.Fatalf("expected examples for leaf help %v, got %+v", tc.path, command)
+				}
+				related, ok := command["related_commands"].([]any)
+				if !ok || len(related) == 0 {
+					t.Fatalf("expected related commands for leaf help %v, got %+v", tc.path, command)
+				}
+				if _, ok := payload["best_practices"].([]any); !ok {
+					t.Fatalf("expected expanded guidance for leaf help %v, got %+v", tc.path, payload)
+				}
+				return
+			}
+
+			if _, ok := command["subcommands"].([]any); !ok {
+				t.Fatalf("expected subgroup help to expose child commands for %v, got %+v", tc.path, command)
+			}
+			if _, ok := payload["best_practices"]; ok {
+				t.Fatalf("expected subgroup help to remain compact for %v, got %+v", tc.path, payload)
+			}
+		})
 	}
 }
 

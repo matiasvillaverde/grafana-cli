@@ -549,3 +549,14 @@ func requestedHelpPath(args []string) ([]string, bool) {
 	}
 	return nil, false
 }
+
+func helpCompactForPath(path []string) bool {
+	if len(path) == 0 {
+		return true
+	}
+	command, ok := findDiscoveryCommand(discoveryCatalog(), path)
+	if !ok {
+		return true
+	}
+	return len(command.Subcommands) > 0
+}

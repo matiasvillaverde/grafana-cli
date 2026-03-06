@@ -100,7 +100,7 @@ func (a *App) Run(ctx context.Context, args []string) int {
 		return 0
 	}
 	if helpPath, ok := requestedHelpPath(rest); ok {
-		_ = a.emitHelp(opts, helpPath, true)
+		_ = a.emitHelp(opts, helpPath, helpCompactForPath(helpPath))
 		return 0
 	}
 	if !opts.Yes {

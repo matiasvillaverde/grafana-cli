@@ -65,7 +65,8 @@ Use grafana-cli to investigate a latency spike in checkout, summarize only key m
 The CLI now treats discovery as part of the product rather than a side effect of help text.
 
 - `grafana --help` returns a compact root schema for low-token discovery loops.
-- `grafana <domain> --help` returns only the relevant subtree for that domain.
+- `grafana <domain> --help` returns a compact subtree for that domain.
+- `grafana <leaf command> --help` expands automatically so the scoped command includes flags, examples, output shape, and related commands.
 - `grafana schema` returns the compact contract explicitly.
 - `grafana schema --full [path...]` returns the richer command catalog, workflows, query syntax, and time-format guidance.
 
