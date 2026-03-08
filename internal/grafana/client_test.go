@@ -95,6 +95,15 @@ func TestClientDomainMethods(t *testing.T) {
 	hits := make(map[string]int)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits[r.URL.Path]++
+		if strings.HasPrefix(r.URL.Path, "/api/v1/check") && r.Header.Get("Authorization") != "Bearer sm-token" {
+			t.Fatalf("missing synthetic monitoring auth header")
+		}
+		if r.URL.Path == "/api/serviceaccounts/search" && r.URL.Query().Get("perpage") != "20" {
+			t.Fatalf("missing service account perpage query: %s", r.URL.RawQuery)
+		}
+		if r.URL.Path == "/api/v1/accesspolicies" && r.URL.Query().Get("region") != "us" {
+			t.Fatalf("missing access policy region query: %s", r.URL.RawQuery)
+		}
 		if r.URL.Path == "/api/search" {
 			if r.URL.Query().Get("q") == "" && r.URL.Query().Get("type") != "dash-db" {
 				t.Fatalf("missing type query")
@@ -120,6 +129,12 @@ func TestClientDomainMethods(t *testing.T) {
 	if _, err := client.CloudStacks(context.Background()); err != nil {
 		t.Fatalf("cloud stacks failed: %v", err)
 	}
+	if _, err := client.CloudAccessPolicies(context.Background(), CloudAccessPolicyListRequest{Region: "us", PageSize: 10}); err != nil {
+		t.Fatalf("cloud access policies failed: %v", err)
+	}
+	if _, err := client.CloudAccessPolicy(context.Background(), "ap-1", "us"); err != nil {
+		t.Fatalf("cloud access policy failed: %v", err)
+	}
 	if _, err := client.SearchDashboards(context.Background(), "errors", "prod", 10); err != nil {
 		t.Fatalf("search dashboards failed: %v", err)
 	}
@@ -128,6 +143,12 @@ func TestClientDomainMethods(t *testing.T) {
 	}
 	if _, err := client.ListDatasources(context.Background()); err != nil {
 		t.Fatalf("list datasources failed: %v", err)
+	}
+	if _, err := client.ServiceAccounts(context.Background(), ServiceAccountListRequest{Query: "graf", Page: 2, Limit: 20}); err != nil {
+		t.Fatalf("service accounts failed: %v", err)
+	}
+	if _, err := client.ServiceAccount(context.Background(), 1); err != nil {
+		t.Fatalf("service account failed: %v", err)
 	}
 	if _, err := client.AssistantChat(context.Background(), "Investigate spike", "chat-1"); err != nil {
 		t.Fatalf("assistant chat failed: %v", err)
@@ -147,9 +168,18 @@ func TestClientDomainMethods(t *testing.T) {
 	if _, err := client.TracesSearch(context.Background(), "{ status = error }", "", "", 5); err != nil {
 		t.Fatalf("traces failed: %v", err)
 	}
+	if _, err := client.SyntheticChecks(context.Background(), SyntheticCheckListRequest{BackendURL: srv.URL, Token: "sm-token", IncludeAlerts: true}); err != nil {
+		t.Fatalf("synthetic checks failed: %v", err)
+	}
+	if _, err := client.SyntheticCheck(context.Background(), SyntheticCheckGetRequest{BackendURL: srv.URL, Token: "sm-token", ID: 123}); err != nil {
+		t.Fatalf("synthetic check failed: %v", err)
+	}
 
-	if hits["/api/v1/stacks"] != 1 || hits["/api/search"] != 2 || hits["/api/dashboards/db"] != 1 || hits["/api/datasources"] != 1 {
+	if hits["/api/v1/stacks"] != 1 || hits["/api/v1/accesspolicies"] != 1 || hits["/api/v1/accesspolicies/ap-1"] != 1 || hits["/api/search"] != 2 || hits["/api/dashboards/db"] != 1 || hits["/api/datasources"] != 1 {
 		t.Fatalf("unexpected hit counts: %+v", hits)
+	}
+	if hits["/api/serviceaccounts/search"] != 1 || hits["/api/serviceaccounts/1"] != 1 {
+		t.Fatalf("expected service account endpoints hit: %+v", hits)
 	}
 	if hits["/api/plugins/grafana-assistant-app/resources/api/v1/assistant/chats"] != 1 {
 		t.Fatalf("expected assistant chat endpoint hit")
@@ -165,6 +195,9 @@ func TestClientDomainMethods(t *testing.T) {
 	}
 	if hits["/api/plugins/grafana-assistant-app/resources/api/v1/assistant/skills"] != 1 {
 		t.Fatalf("expected assistant skills endpoint hit")
+	}
+	if hits["/api/v1/check"] != 1 || hits["/api/v1/check/123"] != 1 {
+		t.Fatalf("expected synthetic check endpoints hit: %+v", hits)
 	}
 	if hits["/api/prom/api/v1/query_range"] != 1 || hits["/loki/api/v1/query_range"] != 1 || hits["/api/search"] < 2 {
 		t.Fatalf("runtime endpoints not hit: %+v", hits)
@@ -198,6 +231,12 @@ func TestClientMissingBaseURLPaths(t *testing.T) {
 	if _, err := client.CloudStacks(context.Background()); !errors.Is(err, ErrMissingBaseURL) {
 		t.Fatalf("expected ErrMissingBaseURL for cloud stacks, got %v", err)
 	}
+	if _, err := client.CloudAccessPolicies(context.Background(), CloudAccessPolicyListRequest{Region: "us"}); !errors.Is(err, ErrMissingBaseURL) {
+		t.Fatalf("expected ErrMissingBaseURL for cloud access policies, got %v", err)
+	}
+	if _, err := client.CloudAccessPolicy(context.Background(), "ap-1", "us"); !errors.Is(err, ErrMissingBaseURL) {
+		t.Fatalf("expected ErrMissingBaseURL for cloud access policy, got %v", err)
+	}
 	if _, err := client.SearchDashboards(context.Background(), "", "", 0); !errors.Is(err, ErrMissingBaseURL) {
 		t.Fatalf("expected ErrMissingBaseURL for search dashboards, got %v", err)
 	}
@@ -225,6 +264,12 @@ func TestClientMissingBaseURLPaths(t *testing.T) {
 	if _, err := client.GetFolder(context.Background(), "x"); !errors.Is(err, ErrMissingBaseURL) {
 		t.Fatalf("expected ErrMissingBaseURL for get folder, got %v", err)
 	}
+	if _, err := client.ServiceAccounts(context.Background(), ServiceAccountListRequest{}); !errors.Is(err, ErrMissingBaseURL) {
+		t.Fatalf("expected ErrMissingBaseURL for service accounts, got %v", err)
+	}
+	if _, err := client.ServiceAccount(context.Background(), 1); !errors.Is(err, ErrMissingBaseURL) {
+		t.Fatalf("expected ErrMissingBaseURL for service account, got %v", err)
+	}
 	if _, err := client.ListAnnotations(context.Background(), AnnotationListRequest{}); !errors.Is(err, ErrMissingBaseURL) {
 		t.Fatalf("expected ErrMissingBaseURL for list annotations, got %v", err)
 	}
@@ -245,6 +290,12 @@ func TestClientMissingBaseURLPaths(t *testing.T) {
 	}
 	if _, err := client.AssistantSkills(context.Background()); !errors.Is(err, ErrMissingBaseURL) {
 		t.Fatalf("expected ErrMissingBaseURL for assistant skills, got %v", err)
+	}
+	if _, err := client.SyntheticChecks(context.Background(), SyntheticCheckListRequest{}); !errors.Is(err, ErrMissingBaseURL) {
+		t.Fatalf("expected ErrMissingBaseURL for synthetic checks, got %v", err)
+	}
+	if _, err := client.SyntheticCheck(context.Background(), SyntheticCheckGetRequest{ID: 1}); !errors.Is(err, ErrMissingBaseURL) {
+		t.Fatalf("expected ErrMissingBaseURL for synthetic check, got %v", err)
 	}
 }
 
@@ -672,6 +723,48 @@ func TestRequestJSONErrorPaths(t *testing.T) {
 	}
 }
 
+func TestRequestJSONWithAuthBranches(t *testing.T) {
+	call := 0
+	client := NewClient(config.Config{BaseURL: "https://grafana.com"}, doerFunc(func(r *http.Request) (*http.Response, error) {
+		if r.Header.Get("Authorization") != "Bearer explicit-token" {
+			t.Fatalf("expected explicit auth token")
+		}
+		call++
+		switch call {
+		case 1:
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader("")),
+				Header:     make(http.Header),
+			}, nil
+		default:
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader("{")),
+				Header:     make(http.Header),
+			}, nil
+		}
+	}))
+
+	resp, err := client.requestJSONWithAuth(context.Background(), http.MethodGet, "https://grafana.com", nil, "explicit-token", 0)
+	if err != nil {
+		t.Fatalf("expected empty-body success, got %v", err)
+	}
+	if _, ok := resp.(map[string]any); !ok {
+		t.Fatalf("expected empty object response")
+	}
+	if _, err := client.requestJSONWithAuth(context.Background(), http.MethodGet, "https://grafana.com", nil, "explicit-token", 0); err == nil {
+		t.Fatalf("expected invalid JSON error")
+	}
+
+	client = NewClient(config.Config{BaseURL: "https://grafana.com"}, doerFunc(func(*http.Request) (*http.Response, error) {
+		return nil, errors.New("network")
+	}))
+	if _, err := client.requestJSONWithAuth(context.Background(), http.MethodGet, "https://grafana.com", nil, "explicit-token", 0); err == nil {
+		t.Fatalf("expected requestJSONWithAuth network error")
+	}
+}
+
 func TestRequestBytesDefaultAcceptAndRenderSlugBranch(t *testing.T) {
 	requests := make([]*http.Request, 0)
 	client := NewClient(config.Config{BaseURL: "https://base"}, doerFunc(func(r *http.Request) (*http.Response, error) {
@@ -757,5 +850,93 @@ func TestJoinURL(t *testing.T) {
 	}
 	if joined, err := joinURL("https://grafana.com", "/x", nil); err != nil || joined != "https://grafana.com/x" {
 		t.Fatalf("expected join without query")
+	}
+	if normalizeExternalBaseURL("synthetic-monitoring-api-us-east-0.grafana.net") != "https://synthetic-monitoring-api-us-east-0.grafana.net" {
+		t.Fatalf("expected normalizeExternalBaseURL to add https scheme")
+	}
+	if normalizeExternalBaseURL("https://synthetic-monitoring-api-us-east-0.grafana.net/") != "https://synthetic-monitoring-api-us-east-0.grafana.net" {
+		t.Fatalf("expected normalizeExternalBaseURL to trim trailing slash")
+	}
+	if normalizeExternalBaseURL("") != "" {
+		t.Fatalf("expected empty normalizeExternalBaseURL result")
+	}
+}
+
+func TestAdditionalClientBranchCoverage(t *testing.T) {
+	requests := make([]*http.Request, 0)
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests = append(requests, r)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+
+	client := NewClient(config.Config{BaseURL: srv.URL, CloudURL: srv.URL}, srv.Client())
+
+	if _, err := client.ServiceAccounts(context.Background(), ServiceAccountListRequest{}); err != nil {
+		t.Fatalf("expected minimal service accounts request to succeed: %v", err)
+	}
+	if _, err := client.CloudAccessPolicies(context.Background(), CloudAccessPolicyListRequest{
+		Name:            "writers",
+		RealmType:       "stack",
+		RealmIdentifier: "123",
+		PageSize:        10,
+		PageCursor:      "cursor-1",
+		Region:          "us",
+		Status:          "active",
+	}); err != nil {
+		t.Fatalf("expected full cloud access policy request to succeed: %v", err)
+	}
+	if _, err := client.CloudAccessPolicy(context.Background(), "ap-2", ""); err != nil {
+		t.Fatalf("expected cloud access policy request without region to succeed: %v", err)
+	}
+	backendHost := strings.TrimPrefix(srv.URL, "https://")
+	if _, err := client.SyntheticChecks(context.Background(), SyntheticCheckListRequest{BackendURL: backendHost, Token: "sm-token"}); err != nil {
+		t.Fatalf("expected synthetic checks host-only backend request to succeed: %v", err)
+	}
+	if _, err := client.SyntheticCheck(context.Background(), SyntheticCheckGetRequest{BackendURL: backendHost, Token: "sm-token", ID: 7}); err != nil {
+		t.Fatalf("expected synthetic check host-only backend request to succeed: %v", err)
+	}
+
+	if len(requests) != 5 {
+		t.Fatalf("expected 5 requests, got %d", len(requests))
+	}
+	if requests[0].URL.RawQuery != "" {
+		t.Fatalf("expected minimal service account query to stay empty, got %s", requests[0].URL.RawQuery)
+	}
+	if requests[1].URL.Query().Get("name") != "writers" || requests[1].URL.Query().Get("realmIdentifier") != "123" || requests[1].URL.Query().Get("pageCursor") != "cursor-1" || requests[1].URL.Query().Get("status") != "active" {
+		t.Fatalf("unexpected cloud access query: %s", requests[1].URL.RawQuery)
+	}
+	if requests[2].URL.RawQuery != "" {
+		t.Fatalf("expected cloud access get without region to omit query, got %s", requests[2].URL.RawQuery)
+	}
+	if requests[3].URL.Query().Get("includeAlerts") != "" || requests[3].Header.Get("Authorization") != "Bearer sm-token" {
+		t.Fatalf("unexpected synthetic checks request: query=%s auth=%s", requests[3].URL.RawQuery, requests[3].Header.Get("Authorization"))
+	}
+	if requests[4].URL.Path != "/api/v1/check/7" {
+		t.Fatalf("unexpected synthetic check path: %s", requests[4].URL.Path)
+	}
+
+	noCall := doerFunc(func(*http.Request) (*http.Response, error) {
+		t.Fatalf("unexpected HTTP call")
+		return nil, nil
+	})
+	if _, err := NewClient(config.Config{CloudURL: "://bad"}, noCall).CloudAccessPolicies(context.Background(), CloudAccessPolicyListRequest{Region: "us"}); err == nil {
+		t.Fatalf("expected invalid cloud URL error")
+	}
+	if _, err := NewClient(config.Config{CloudURL: "://bad"}, noCall).CloudAccessPolicy(context.Background(), "ap-1", "us"); err == nil {
+		t.Fatalf("expected invalid cloud URL error for single access policy")
+	}
+	if _, err := NewClient(config.Config{BaseURL: "://bad"}, noCall).ServiceAccounts(context.Background(), ServiceAccountListRequest{}); err == nil {
+		t.Fatalf("expected invalid base URL error for service accounts")
+	}
+	if _, err := NewClient(config.Config{BaseURL: "://bad"}, noCall).ServiceAccount(context.Background(), 1); err == nil {
+		t.Fatalf("expected invalid base URL error for service account")
+	}
+	if _, err := NewClient(config.Config{}, noCall).SyntheticChecks(context.Background(), SyntheticCheckListRequest{BackendURL: "%", Token: "sm-token"}); err == nil {
+		t.Fatalf("expected invalid synthetic backend URL error")
+	}
+	if _, err := NewClient(config.Config{}, noCall).SyntheticCheck(context.Background(), SyntheticCheckGetRequest{BackendURL: "%", Token: "sm-token", ID: 1}); err == nil {
+		t.Fatalf("expected invalid synthetic backend URL error for get")
 	}
 }

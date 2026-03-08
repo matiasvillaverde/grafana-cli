@@ -163,6 +163,24 @@ func discoveryCatalog() []discoveryCommand {
 						{Name: "list", Description: "List available Grafana Cloud stacks", ReadOnly: true, Examples: []string{"grafana cloud stacks list"}, OutputShape: `{"items":[...]}`, RelatedCommands: []string{"auth doctor", "context list"}, TokenCost: "small"},
 					},
 				},
+				{
+					Name:        "access-policies",
+					Description: "Inspect Cloud access policies",
+					ReadOnly:    true,
+					Subcommands: []discoveryCommand{
+						{Name: "list", Description: "List access policies", ReadOnly: true, Flags: []discoveryFlag{{Name: "--region", Type: "string", Description: "Policy region"}, {Name: "--name", Type: "string", Description: "Name filter"}, {Name: "--realm-type", Type: "string", Description: "org or stack"}, {Name: "--realm-identifier", Type: "string", Description: "Realm ID"}, {Name: "--status", Type: "string", Description: "active or inactive"}, {Name: "--page-size", Type: "int", Default: 100, Description: "Page size"}, {Name: "--page-cursor", Type: "string", Description: "Page cursor"}}, Examples: []string{`grafana cloud access-policies list --region us`, `grafana cloud access-policies list --region eu --realm-type stack --realm-identifier 12345`}, OutputShape: `{"items":[{"id":"uuid","name":"stack-readers"}],"metadata":{"pagination":{"nextPage":"/v1/accesspolicies?pageCursor=..."}}}`, RelatedCommands: []string{"cloud access-policies get", "service-accounts list"}, TokenCost: "small"},
+						{Name: "get", Description: "Get one access policy", ReadOnly: true, Flags: []discoveryFlag{{Name: "--id", Type: "string", Description: "Policy ID"}, {Name: "--region", Type: "string", Description: "Policy region"}}, Examples: []string{`grafana cloud access-policies get --id c45485b6-8321-4cf2-bcec-12006df755ff --region us`}, OutputShape: `{"id":"uuid","name":"stack-readers","scopes":["metrics:read"]}`, RelatedCommands: []string{"cloud access-policies list", "auth doctor"}, TokenCost: "small"},
+					},
+				},
+			},
+		},
+		{
+			Name:        "service-accounts",
+			Description: "Inspect service accounts",
+			ReadOnly:    true,
+			Subcommands: []discoveryCommand{
+				{Name: "list", Description: "List service accounts", ReadOnly: true, Flags: []discoveryFlag{{Name: "--query", Type: "string", Description: "Name filter"}, {Name: "--page", Type: "int", Default: 1, Description: "Page"}, {Name: "--limit", Type: "int", Default: 100, Description: "Page size"}}, Examples: []string{`grafana service-accounts list`, `grafana service-accounts list --query writer --page 2 --limit 20`}, OutputShape: `{"totalCount":2,"serviceAccounts":[{"id":1,"name":"grafana"}],"page":1,"perPage":10}`, RelatedCommands: []string{"service-accounts get", "cloud access-policies list"}, TokenCost: "small"},
+				{Name: "get", Description: "Get one service account", ReadOnly: true, Flags: []discoveryFlag{{Name: "--id", Type: "int", Description: "Service account ID"}}, Examples: []string{`grafana service-accounts get --id 1`}, OutputShape: `{"id":1,"name":"grafana","tokens":0}`, RelatedCommands: []string{"service-accounts list", "auth doctor"}, TokenCost: "small"},
 			},
 		},
 		{
@@ -251,8 +269,20 @@ func discoveryCatalog() []discoveryCommand {
 			ReadOnly:    false,
 			Subcommands: []discoveryCommand{
 				{Name: "chat", Description: "Send a prompt to Grafana Assistant", ReadOnly: false, Flags: []discoveryFlag{{Name: "--prompt", Type: "string", Description: "Assistant prompt"}, {Name: "--chat-id", Type: "string", Description: "Existing chat ID"}}, Examples: []string{`grafana assistant chat --prompt "Investigate elevated error rate"`}, OutputShape: `{"chatId":"chat_123"}`, RelatedCommands: []string{"assistant status", "assistant skills"}, TokenCost: "medium"},
+				{Name: "investigate", Description: "Start an assistant investigation", ReadOnly: false, Flags: []discoveryFlag{{Name: "--goal", Type: "string", Description: "Investigation goal"}, {Name: "--chat-id", Type: "string", Description: "Existing chat ID"}}, Examples: []string{`grafana assistant investigate --goal "Investigate checkout latency spike"`}, OutputShape: `{"goal":"Investigate checkout latency spike","chat":{"chatId":"chat_123"}}`, RelatedCommands: []string{"assistant status", "incident analyze", "runtime logs query"}, TokenCost: "medium"},
 				{Name: "status", Description: "Poll Assistant chat status", ReadOnly: true, Flags: []discoveryFlag{{Name: "--chat-id", Type: "string", Description: "Chat ID"}}, Examples: []string{"grafana assistant status --chat-id chat_123"}, OutputShape: `{"status":"completed"}`, RelatedCommands: []string{"assistant chat", "assistant skills"}, TokenCost: "small"},
 				{Name: "skills", Description: "List Assistant skills", ReadOnly: true, Examples: []string{"grafana assistant skills"}, OutputShape: `{"items":[...]}`, RelatedCommands: []string{"assistant chat", "incident analyze"}, TokenCost: "small"},
+			},
+		},
+		{
+			Name:        "synthetics",
+			Description: "Inspect Synthetic Monitoring checks",
+			ReadOnly:    true,
+			Subcommands: []discoveryCommand{
+				{Name: "checks", Description: "Inspect Synthetic Monitoring checks", ReadOnly: true, Subcommands: []discoveryCommand{
+					{Name: "list", Description: "List checks", ReadOnly: true, Flags: []discoveryFlag{{Name: "--backend-url", Type: "string", Description: "Backend address"}, {Name: "--token", Type: "string", Description: "Access token"}, {Name: "--include-alerts", Type: "bool", Default: false, Description: "Include alerts"}}, Examples: []string{`grafana synthetics checks list --backend-url synthetic-monitoring-api-us-east-0.grafana.net --token "$GRAFANA_SYNTHETICS_TOKEN"`}, OutputShape: `[{"id":123,"job":"checkout"}]`, RelatedCommands: []string{"synthetics checks get", "assistant investigate"}, TokenCost: "small"},
+					{Name: "get", Description: "Get one check", ReadOnly: true, Flags: []discoveryFlag{{Name: "--backend-url", Type: "string", Description: "Backend address"}, {Name: "--token", Type: "string", Description: "Access token"}, {Name: "--id", Type: "int", Description: "Check ID"}}, Examples: []string{`grafana synthetics checks get --backend-url synthetic-monitoring-api-us-east-0.grafana.net --token "$GRAFANA_SYNTHETICS_TOKEN" --id 123`}, OutputShape: `{"check":{"id":123,"job":"checkout"}}`, RelatedCommands: []string{"synthetics checks list", "runtime metrics query"}, TokenCost: "small"},
+				}},
 			},
 		},
 		{
@@ -477,6 +507,11 @@ func buildDiscoveryPayload(path []string, compact bool) (map[string]any, error) 
 		}
 		commandPayloads = append(commandPayloads, fullCommandPayload(command, nil))
 	}
+	if compact && len(path) == 0 {
+		for _, payload := range commandPayloads {
+			trimCompactRootPayload(payload)
+		}
+	}
 
 	payload := map[string]any{
 		"version":      cliVersion,
@@ -502,6 +537,17 @@ func buildDiscoveryPayload(path []string, compact bool) (map[string]any, error) 
 		}
 	}
 	return payload, nil
+}
+
+func trimCompactRootPayload(payload map[string]any) {
+	delete(payload, "flags")
+	children, ok := payload["subcommands"].([]map[string]any)
+	if !ok {
+		return
+	}
+	for _, child := range children {
+		trimCompactRootPayload(child)
+	}
 }
 
 func findDiscoveryCommand(commands []discoveryCommand, path []string) (discoveryCommand, bool) {

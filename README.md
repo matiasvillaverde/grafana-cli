@@ -9,7 +9,7 @@ Agent-first CLI for Grafana and Grafana Cloud. Built for engineers working with 
 - **Discoverable** - `grafana schema --compact` returns a machine-readable command catalog in one bounded call
 - **Structured** - compact JSON by default with `--json`, `--jq`, and `--template` for output shaping
 - **Secure** - OS keyring token storage, `--read-only` guardrail, `--yes` for explicit destructive confirms
-- **Broad** - dashboards, alerting, logs, metrics, traces, assistant, incidents, OnCall, and SLOs
+- **Broad** - dashboards, alerting, logs, metrics, traces, assistant, incidents, OnCall, SLOs, service accounts, access policies, and synthetics
 - **Token-aware** - every command is designed to minimize token usage in agent loops
 
 ## Try It
@@ -21,11 +21,23 @@ grafana auth login --token "$GRAFANA_TOKEN" --stack my-stack
 # Check what's configured
 grafana auth doctor
 
+# Inspect activation surfaces
+grafana service-accounts list
+grafana cloud access-policies list --region us
+
+# Inspect Synthetic Monitoring checks
+grafana synthetics checks list \
+  --backend-url "$GRAFANA_SYNTHETICS_BACKEND_URL" \
+  --token "$GRAFANA_SYNTHETICS_TOKEN"
+
 # Search dashboards
 grafana dashboards list --query latency --tag prod
 
 # Query logs from the last 30 minutes
 grafana runtime logs query --query '{app="checkout"} |= "error"' --start 30m
+
+# Start an assistant-led investigation
+grafana assistant investigate --goal "Investigate checkout latency spike"
 
 # Investigate an incident
 grafana incident analyze --goal "Investigate checkout latency spike"
@@ -33,7 +45,6 @@ grafana incident analyze --goal "Investigate checkout latency spike"
 # Shape output for your agent
 grafana --json summary incident analyze --goal "Latency spike"
 grafana --jq '.summary' incident analyze --goal "Latency spike"
-
 # Wrap in a deterministic envelope for downstream parsing
 grafana --agent incident analyze --goal "Latency spike"
 ```
@@ -145,8 +156,23 @@ All runtime commands support relative time inputs: `30m`, `1h`, `now-2h`, `2026-
 | Command | Description |
 |---------|-------------|
 | `assistant chat --prompt ...` | Send a prompt to Grafana Assistant |
+| `assistant investigate --goal ...` | Start an assistant-led investigation for an operational goal |
 | `assistant status --chat-id ...` | Poll assistant chat status |
 | `assistant skills` | List available assistant skills |
+
+</details>
+
+<details>
+<summary><strong>Access & Synthetics</strong></summary>
+
+| Command | Description |
+|---------|-------------|
+| `service-accounts list` | Search Grafana service accounts with paging metadata |
+| `service-accounts get --id ...` | Fetch one service account by ID |
+| `cloud access-policies list --region ...` | List Grafana Cloud access policies for a region |
+| `cloud access-policies get --id ... --region ...` | Fetch one Grafana Cloud access policy |
+| `synthetics checks list --backend-url ... --token ...` | List Synthetic Monitoring checks |
+| `synthetics checks get --backend-url ... --token ... --id ...` | Fetch one Synthetic Monitoring check |
 
 </details>
 
@@ -209,7 +235,7 @@ The CLI treats discovery as a first-class interface - agents can understand the 
 grafana --help                        # Compact root schema
 grafana runtime --help                # Compact runtime subtree
 grafana runtime metrics query --help  # Expanded scoped help for one leaf command
-grafana schema                        # Bounded machine-readable contract (compact by default)
+grafana schema                       # Bounded machine-readable contract (compact by default)
 grafana schema --full runtime metrics # Richer contract with examples, workflows, and query syntax
 ```
 
@@ -235,7 +261,7 @@ Releases are automatic on every merge to `main`. Versioning follows [Conventiona
 
 ## Roadmap
 
-- Broader Grafana Cloud product coverage (synthetic monitoring, k6, profiles, frontend observability)
+- Broader Grafana Cloud product coverage (k6, profiles, frontend observability, deeper synthetic monitoring write flows)
 - Richer agent execution plans and remediation actions
 - Graph RAG for past incidents to reuse historical context during triage
 

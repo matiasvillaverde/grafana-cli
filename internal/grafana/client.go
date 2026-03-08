@@ -492,7 +492,27 @@ func (c *Client) requestJSON(ctx context.Context, method, endpoint string, body 
 	return out, nil
 }
 
+func (c *Client) requestJSONWithAuth(ctx context.Context, method, endpoint string, body any, token string, orgID int64) (any, error) {
+	data, _, err := c.requestBytesWithAuth(ctx, method, endpoint, body, "application/json", token, orgID)
+	if err != nil {
+		return nil, err
+	}
+	if len(bytes.TrimSpace(data)) == 0 {
+		return map[string]any{}, nil
+	}
+
+	var out any
+	if err := json.Unmarshal(data, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *Client) requestBytes(ctx context.Context, method, endpoint string, body any, accept string) ([]byte, http.Header, error) {
+	return c.requestBytesWithAuth(ctx, method, endpoint, body, accept, c.cfg.Token, c.cfg.OrgID)
+}
+
+func (c *Client) requestBytesWithAuth(ctx context.Context, method, endpoint string, body any, accept, token string, orgID int64) ([]byte, http.Header, error) {
 	var reader io.Reader
 	if body != nil {
 		data, err := json.Marshal(body)
@@ -514,11 +534,11 @@ func (c *Client) requestBytes(ctx context.Context, method, endpoint string, body
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if strings.TrimSpace(c.cfg.Token) != "" {
-		req.Header.Set("Authorization", "Bearer "+c.cfg.Token)
+	if strings.TrimSpace(token) != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	if c.cfg.OrgID > 0 {
-		req.Header.Set("X-Grafana-Org-Id", strconv.FormatInt(c.cfg.OrgID, 10))
+	if orgID > 0 {
+		req.Header.Set("X-Grafana-Org-Id", strconv.FormatInt(orgID, 10))
 	}
 
 	resp, err := c.doer.Do(req)
