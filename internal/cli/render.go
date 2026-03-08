@@ -22,7 +22,7 @@ type responseEnvelope struct {
 	Metadata *responseMetadata `json:"metadata,omitempty"`
 }
 
-var collectionKeys = []string{"items", "data", "results", "result", "traces", "queryHistory", "slos"}
+var collectionKeys = []string{"items", "data", "results", "result", "traces", "queryHistory", "slos", "serviceAccounts"}
 
 func withCommandMetadata(meta *responseMetadata, command string) *responseMetadata {
 	if meta == nil {

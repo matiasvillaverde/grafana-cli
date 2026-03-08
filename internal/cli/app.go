@@ -27,6 +27,8 @@ import (
 type APIClient interface {
 	Raw(ctx context.Context, method, path string, body any) (any, error)
 	CloudStacks(ctx context.Context) (any, error)
+	CloudAccessPolicies(ctx context.Context, req grafana.CloudAccessPolicyListRequest) (any, error)
+	CloudAccessPolicy(ctx context.Context, id, region string) (any, error)
 	SearchDashboards(ctx context.Context, query, tag string, limit int) (any, error)
 	GetDashboard(ctx context.Context, uid string) (any, error)
 	CreateDashboard(ctx context.Context, dashboard map[string]any, folderID int64, overwrite bool) (any, error)
@@ -36,6 +38,8 @@ type APIClient interface {
 	ListDatasources(ctx context.Context) (any, error)
 	ListFolders(ctx context.Context) (any, error)
 	GetFolder(ctx context.Context, uid string) (any, error)
+	ServiceAccounts(ctx context.Context, req grafana.ServiceAccountListRequest) (any, error)
+	ServiceAccount(ctx context.Context, id int64) (any, error)
 	ListAnnotations(ctx context.Context, req grafana.AnnotationListRequest) (any, error)
 	AlertingRules(ctx context.Context) (any, error)
 	AlertingContactPoints(ctx context.Context) (any, error)
@@ -43,6 +47,8 @@ type APIClient interface {
 	AssistantChat(ctx context.Context, prompt, chatID string) (any, error)
 	AssistantChatStatus(ctx context.Context, chatID string) (any, error)
 	AssistantSkills(ctx context.Context) (any, error)
+	SyntheticChecks(ctx context.Context, req grafana.SyntheticCheckListRequest) (any, error)
+	SyntheticCheck(ctx context.Context, req grafana.SyntheticCheckGetRequest) (any, error)
 	MetricsRange(ctx context.Context, expr, start, end, step string) (any, error)
 	LogsRange(ctx context.Context, query, start, end string, limit int) (any, error)
 	TracesSearch(ctx context.Context, query, start, end string, limit int) (any, error)
@@ -130,6 +136,8 @@ func (a *App) Run(ctx context.Context, args []string) int {
 		runErr = a.runAPI(ctx, opts, rest[1:])
 	case "cloud":
 		runErr = a.runCloud(ctx, opts, rest[1:])
+	case "service-accounts":
+		runErr = a.runServiceAccounts(ctx, opts, rest[1:])
 	case "dashboards":
 		runErr = a.runDashboards(ctx, opts, rest[1:])
 	case "datasources":
@@ -146,6 +154,8 @@ func (a *App) Run(ctx context.Context, args []string) int {
 		runErr = a.runSLO(ctx, opts, rest[1:])
 	case "assistant":
 		runErr = a.runAssistant(ctx, opts, rest[1:])
+	case "synthetics":
+		runErr = a.runSynthetics(ctx, opts, rest[1:])
 	case "runtime":
 		runErr = a.runRuntime(ctx, opts, rest[1:])
 	case "aggregate":
@@ -428,21 +438,25 @@ func (a *App) runCloud(ctx context.Context, opts globalOptions, args []string) e
 	if len(args) == 0 || isHelpArg(args[0]) {
 		return a.emitHelp(opts, []string{"cloud"}, true)
 	}
-	if args[0] != "stacks" {
+	switch args[0] {
+	case "stacks":
+		if len(args) < 2 || args[1] != "list" {
+			return errors.New("usage: cloud stacks list")
+		}
+		cfg, err := a.requireAuthConfig()
+		if err != nil {
+			return err
+		}
+		result, err := a.NewClient(cfg).CloudStacks(ctx)
+		if err != nil {
+			return err
+		}
+		return a.emitWithMetadata(opts, result, collectionMetadata("cloud stacks list", result, 0, ""))
+	case "access-policies":
+		return a.runCloudAccessPolicies(ctx, opts, args[1:])
+	default:
 		return fmt.Errorf("unknown cloud command: %s", args[0])
 	}
-	if len(args) < 2 || args[1] != "list" {
-		return errors.New("usage: cloud stacks list")
-	}
-	cfg, err := a.requireAuthConfig()
-	if err != nil {
-		return err
-	}
-	result, err := a.NewClient(cfg).CloudStacks(ctx)
-	if err != nil {
-		return err
-	}
-	return a.emitWithMetadata(opts, result, collectionMetadata("cloud stacks list", result, 0, ""))
 }
 
 func (a *App) runDashboards(ctx context.Context, opts globalOptions, args []string) error {
@@ -919,6 +933,30 @@ func (a *App) runAssistant(ctx context.Context, opts globalOptions, args []strin
 			return err
 		}
 		return a.emitWithMetadata(opts, result, collectionMetadata("assistant skills", result, 0, ""))
+	case "investigate":
+		fs := flag.NewFlagSet("assistant investigate", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		goal := fs.String("goal", "", "investigation goal")
+		chatID := fs.String("chat-id", "", "existing chat ID to continue")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if strings.TrimSpace(*goal) == "" {
+			return errors.New("--goal is required")
+		}
+		result, err := client.AssistantChat(ctx, investigationPrompt(*goal), *chatID)
+		if err != nil {
+			return err
+		}
+		payload := map[string]any{
+			"goal": strings.TrimSpace(*goal),
+			"chat": result,
+		}
+		meta := &responseMetadata{Command: "assistant investigate"}
+		if chatIdentifier := firstNonEmptyString(mapValue(payload, "chat"), "chatId", "chatID", "id"); chatIdentifier != "" {
+			meta.NextAction = "Use `grafana assistant status --chat-id " + chatIdentifier + "` to poll the investigation"
+		}
+		return a.emitWithMetadata(opts, payload, meta)
 	default:
 		return fmt.Errorf("unknown assistant command: %s", args[0])
 	}
@@ -1604,7 +1642,12 @@ func payloadHasNextPage(payload any) bool {
 	if !ok {
 		return false
 	}
-	return strings.TrimSpace(firstNonEmptyString(root, "next", "nextPage")) != ""
+	if strings.TrimSpace(firstNonEmptyString(root, "next", "nextPage")) != "" {
+		return true
+	}
+	metadata := mapValue(root, "metadata")
+	pagination := mapValue(metadata, "pagination")
+	return strings.TrimSpace(firstNonEmptyString(pagination, "next", "nextPage")) != ""
 }
 
 func enforceConfirmation(args []string) error {

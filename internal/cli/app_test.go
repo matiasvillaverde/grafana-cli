@@ -197,6 +197,13 @@ type fakeClient struct {
 	rawCalls            []string
 	cloudResult         any
 	cloudErr            error
+	cloudAccessResult   any
+	cloudAccessErr      error
+	cloudAccessReq      grafana.CloudAccessPolicyListRequest
+	cloudAccessOne      any
+	cloudAccessOneErr   error
+	cloudAccessID       string
+	cloudAccessRegion   string
 	searchDashResult    any
 	searchDashErr       error
 	getDashResult       any
@@ -216,6 +223,12 @@ type fakeClient struct {
 	listFoldersErr      error
 	getFolderResult     any
 	getFolderErr        error
+	serviceAccountsResp any
+	serviceAccountsErr  error
+	serviceAccountsReq  grafana.ServiceAccountListRequest
+	serviceAccountResp  any
+	serviceAccountErr   error
+	serviceAccountID    int64
 	annotationsResult   any
 	annotationsErr      error
 	annotationsReq      grafana.AnnotationListRequest
@@ -252,6 +265,12 @@ type fakeClient struct {
 	tracesStart         string
 	tracesEnd           string
 	tracesLimit         int
+	syntheticChecksResp any
+	syntheticChecksErr  error
+	syntheticChecksReq  grafana.SyntheticCheckListRequest
+	syntheticCheckResp  any
+	syntheticCheckErr   error
+	syntheticCheckReq   grafana.SyntheticCheckGetRequest
 	aggregateResult     grafana.AggregateSnapshot
 	aggregateErr        error
 	aggregateReq        grafana.AggregateRequest
@@ -276,6 +295,17 @@ func (f *fakeClient) Raw(_ context.Context, method, path string, body any) (any,
 
 func (f *fakeClient) CloudStacks(_ context.Context) (any, error) {
 	return f.cloudResult, f.cloudErr
+}
+
+func (f *fakeClient) CloudAccessPolicies(_ context.Context, req grafana.CloudAccessPolicyListRequest) (any, error) {
+	f.cloudAccessReq = req
+	return f.cloudAccessResult, f.cloudAccessErr
+}
+
+func (f *fakeClient) CloudAccessPolicy(_ context.Context, id, region string) (any, error) {
+	f.cloudAccessID = id
+	f.cloudAccessRegion = region
+	return f.cloudAccessOne, f.cloudAccessOneErr
 }
 
 func (f *fakeClient) SearchDashboards(_ context.Context, _, _ string, _ int) (any, error) {
@@ -318,6 +348,16 @@ func (f *fakeClient) GetFolder(_ context.Context, _ string) (any, error) {
 	return f.getFolderResult, f.getFolderErr
 }
 
+func (f *fakeClient) ServiceAccounts(_ context.Context, req grafana.ServiceAccountListRequest) (any, error) {
+	f.serviceAccountsReq = req
+	return f.serviceAccountsResp, f.serviceAccountsErr
+}
+
+func (f *fakeClient) ServiceAccount(_ context.Context, id int64) (any, error) {
+	f.serviceAccountID = id
+	return f.serviceAccountResp, f.serviceAccountErr
+}
+
 func (f *fakeClient) ListAnnotations(_ context.Context, req grafana.AnnotationListRequest) (any, error) {
 	f.annotationsReq = req
 	return f.annotationsResult, f.annotationsErr
@@ -348,6 +388,16 @@ func (f *fakeClient) AssistantChatStatus(_ context.Context, chatID string) (any,
 
 func (f *fakeClient) AssistantSkills(_ context.Context) (any, error) {
 	return f.assistantSkillsResp, f.assistantSkillsErr
+}
+
+func (f *fakeClient) SyntheticChecks(_ context.Context, req grafana.SyntheticCheckListRequest) (any, error) {
+	f.syntheticChecksReq = req
+	return f.syntheticChecksResp, f.syntheticChecksErr
+}
+
+func (f *fakeClient) SyntheticCheck(_ context.Context, req grafana.SyntheticCheckGetRequest) (any, error) {
+	f.syntheticCheckReq = req
+	return f.syntheticCheckResp, f.syntheticCheckErr
 }
 
 func (f *fakeClient) MetricsRange(_ context.Context, expr, start, end, step string) (any, error) {
@@ -559,6 +609,12 @@ func TestRunHelpAndUnknown(t *testing.T) {
 	}
 	if findCommandByName(t, commands, "schema")["description"] == "" {
 		t.Fatalf("expected schema command in root help")
+	}
+	if findCommandByName(t, commands, "service-accounts")["description"] == "" {
+		t.Fatalf("expected service-accounts command in root help")
+	}
+	if findCommandByName(t, commands, "synthetics")["description"] == "" {
+		t.Fatalf("expected synthetics command in root help")
 	}
 
 	out.Reset()
@@ -1094,6 +1150,183 @@ func TestDashboardFolderAnnotationAndAlertingCommands(t *testing.T) {
 	}
 }
 
+func TestCloudAccessServiceAccountsAndSyntheticsCommands(t *testing.T) {
+	store := &fakeStore{cfg: config.Config{Token: "token"}}
+	client := &fakeClient{
+		cloudAccessResult: map[string]any{
+			"items": []any{map[string]any{"id": "ap-1", "name": "stack-readers"}},
+			"metadata": map[string]any{
+				"pagination": map[string]any{"nextPage": "/v1/accesspolicies?pageCursor=abc"},
+			},
+		},
+		cloudAccessOne:      map[string]any{"id": "ap-1", "name": "stack-readers"},
+		serviceAccountsResp: map[string]any{"totalCount": 3, "serviceAccounts": []any{map[string]any{"id": 1, "name": "grafana"}}, "page": 2, "perPage": 1},
+		serviceAccountResp:  map[string]any{"id": 1, "name": "grafana"},
+		syntheticChecksResp: []any{map[string]any{"id": 123, "job": "checkout"}},
+		syntheticCheckResp:  map[string]any{"id": 123, "job": "checkout"},
+	}
+	app, out, errOut := newTestApp(store, client)
+
+	if code := app.Run(context.Background(), []string{"--agent", "cloud", "access-policies", "list", "--region", "us", "--realm-type", "stack", "--realm-identifier", "123", "--status", "active", "--page-size", "50", "--page-cursor", "cursor-1"}); code != 0 {
+		t.Fatalf("cloud access-policies list should succeed: %s", errOut.String())
+	}
+	if client.cloudAccessReq.Region != "us" || client.cloudAccessReq.RealmType != "stack" || client.cloudAccessReq.RealmIdentifier != "123" || client.cloudAccessReq.Status != "active" || client.cloudAccessReq.PageSize != 50 || client.cloudAccessReq.PageCursor != "cursor-1" {
+		t.Fatalf("unexpected cloud access request: %+v", client.cloudAccessReq)
+	}
+	accessEnvelope := decodeJSON(t, out.String())
+	accessMeta := accessEnvelope["metadata"].(map[string]any)
+	if accessMeta["command"] != "cloud access-policies list" || accessMeta["count"] != float64(1) || accessMeta["truncated"] != true {
+		t.Fatalf("unexpected cloud access metadata: %+v", accessMeta)
+	}
+	if accessMeta["next_action"] == "" {
+		t.Fatalf("expected cloud access next_action")
+	}
+
+	out.Reset()
+	errOut.Reset()
+	if code := app.Run(context.Background(), []string{"cloud", "access-policies", "get", "--id", "ap-1", "--region", "us"}); code != 0 {
+		t.Fatalf("cloud access-policies get should succeed: %s", errOut.String())
+	}
+	if client.cloudAccessID != "ap-1" || client.cloudAccessRegion != "us" {
+		t.Fatalf("unexpected cloud access get args: id=%s region=%s", client.cloudAccessID, client.cloudAccessRegion)
+	}
+	if decodeJSON(t, out.String())["id"] != "ap-1" {
+		t.Fatalf("unexpected access policy get output")
+	}
+
+	out.Reset()
+	errOut.Reset()
+	if code := app.Run(context.Background(), []string{"--agent", "service-accounts", "list", "--query", "graf", "--page", "2", "--limit", "1"}); code != 0 {
+		t.Fatalf("service-accounts list should succeed: %s", errOut.String())
+	}
+	if client.serviceAccountsReq.Query != "graf" || client.serviceAccountsReq.Page != 2 || client.serviceAccountsReq.Limit != 1 {
+		t.Fatalf("unexpected service account request: %+v", client.serviceAccountsReq)
+	}
+	serviceEnvelope := decodeJSON(t, out.String())
+	serviceMeta := serviceEnvelope["metadata"].(map[string]any)
+	if serviceMeta["command"] != "service-accounts list" || serviceMeta["count"] != float64(1) || serviceMeta["truncated"] != true {
+		t.Fatalf("unexpected service account metadata: %+v", serviceMeta)
+	}
+
+	out.Reset()
+	errOut.Reset()
+	if code := app.Run(context.Background(), []string{"service-accounts", "get", "--id", "1"}); code != 0 {
+		t.Fatalf("service-accounts get should succeed: %s", errOut.String())
+	}
+	if client.serviceAccountID != 1 {
+		t.Fatalf("unexpected service account id: %d", client.serviceAccountID)
+	}
+	if decodeJSON(t, out.String())["id"] != float64(1) {
+		t.Fatalf("unexpected service account get output")
+	}
+
+	out.Reset()
+	errOut.Reset()
+	if code := app.Run(context.Background(), []string{"synthetics", "checks", "list", "--backend-url", "synthetic-monitoring-api-us-east-0.grafana.net", "--token", "sm-token", "--include-alerts"}); code != 0 {
+		t.Fatalf("synthetics checks list should succeed: %s", errOut.String())
+	}
+	if client.syntheticChecksReq.BackendURL != "synthetic-monitoring-api-us-east-0.grafana.net" || client.syntheticChecksReq.Token != "sm-token" || !client.syntheticChecksReq.IncludeAlerts {
+		t.Fatalf("unexpected synthetic checks request: %+v", client.syntheticChecksReq)
+	}
+	if len(decodeJSONArray(t, out.String())) != 1 {
+		t.Fatalf("expected one synthetic check in output")
+	}
+
+	t.Setenv("GRAFANA_SYNTHETICS_BACKEND_URL", "synthetic-monitoring-api-eu-west-0.grafana.net")
+	t.Setenv("GRAFANA_SYNTHETICS_TOKEN", "env-token")
+	out.Reset()
+	errOut.Reset()
+	if code := app.Run(context.Background(), []string{"synthetics", "checks", "get", "--id", "123"}); code != 0 {
+		t.Fatalf("synthetics checks get should succeed with env auth: %s", errOut.String())
+	}
+	if client.syntheticCheckReq.BackendURL != "synthetic-monitoring-api-eu-west-0.grafana.net" || client.syntheticCheckReq.Token != "env-token" || client.syntheticCheckReq.ID != 123 {
+		t.Fatalf("unexpected synthetic check request: %+v", client.syntheticCheckReq)
+	}
+	if decodeJSON(t, out.String())["id"] != float64(123) {
+		t.Fatalf("unexpected synthetic check get output")
+	}
+}
+
+func TestCloudAccessServiceAccountsAndSyntheticsValidation(t *testing.T) {
+	store := &fakeStore{cfg: config.Config{Token: "token"}}
+	client := &fakeClient{}
+	app, out, errOut := newTestApp(store, client)
+
+	for _, args := range [][]string{
+		{"cloud", "access-policies", "list"},
+		{"cloud", "access-policies", "list", "--bad"},
+		{"cloud", "access-policies", "list", "--region", "us", "--page-size", "0"},
+		{"cloud", "access-policies", "list", "--region", "us", "--realm-identifier", "123"},
+		{"cloud", "access-policies", "list", "--region", "us", "--realm-type", "team"},
+		{"cloud", "access-policies", "list", "--region", "us", "--status", "paused"},
+		{"cloud", "access-policies", "get", "--bad"},
+		{"cloud", "access-policies", "get", "--region", "us"},
+		{"cloud", "access-policies", "get", "--id", "ap-1"},
+		{"cloud", "access-policies", "bad"},
+		{"service-accounts", "list", "--page", "0"},
+		{"service-accounts", "list", "--bad"},
+		{"service-accounts", "list", "--limit", "0"},
+		{"service-accounts", "get", "--bad"},
+		{"service-accounts", "get", "--id", "0"},
+		{"service-accounts", "bad"},
+		{"synthetics", "bad"},
+		{"synthetics", "bad", "list"},
+		{"synthetics", "checks"},
+		{"synthetics", "checks", "list"},
+		{"synthetics", "checks", "list", "--bad"},
+		{"synthetics", "checks", "get", "--id", "0"},
+		{"synthetics", "checks", "get", "--bad"},
+		{"synthetics", "checks", "bad"},
+	} {
+		out.Reset()
+		errOut.Reset()
+		if code := app.Run(context.Background(), args); code != 1 {
+			t.Fatalf("expected failure for %v", args)
+		}
+	}
+
+	out.Reset()
+	if code := app.Run(context.Background(), []string{"cloud", "access-policies"}); code != 0 {
+		t.Fatalf("cloud access-policies root help should succeed")
+	}
+	if _, ok := decodeJSON(t, out.String())["commands"]; !ok {
+		t.Fatalf("expected cloud access-policies root help output")
+	}
+
+	out.Reset()
+	if code := app.Run(context.Background(), []string{"cloud", "access-policies", "--help"}); code != 0 {
+		t.Fatalf("cloud access-policies help should succeed")
+	}
+	if _, ok := decodeJSON(t, out.String())["commands"]; !ok {
+		t.Fatalf("expected cloud access-policies help output")
+	}
+
+	out.Reset()
+	if code := app.Run(context.Background(), []string{"service-accounts"}); code != 0 {
+		t.Fatalf("service-accounts help should succeed")
+	}
+	if _, ok := decodeJSON(t, out.String())["commands"]; !ok {
+		t.Fatalf("expected service-accounts help output")
+	}
+
+	out.Reset()
+	if code := app.Run(context.Background(), []string{"synthetics"}); code != 0 {
+		t.Fatalf("synthetics help should succeed")
+	}
+	if _, ok := decodeJSON(t, out.String())["commands"]; !ok {
+		t.Fatalf("expected synthetics help output")
+	}
+
+	out.Reset()
+	errOut.Reset()
+	if code := app.Run(context.Background(), []string{"synthetics", "checks", "list", "--backend-url", "synthetic-monitoring-api-us-east-0.grafana.net"}); code != 1 {
+		t.Fatalf("synthetics checks list missing token should fail")
+	}
+	if !strings.Contains(errOut.String(), "--token is required") {
+		t.Fatalf("expected synthetic token validation error, got %s", errOut.String())
+	}
+}
+
 func TestGroupHelpWithoutAuth(t *testing.T) {
 	store := &fakeContextStore{
 		current: "default",
@@ -1107,12 +1340,14 @@ func TestGroupHelpWithoutAuth(t *testing.T) {
 		{"context", "-help"},
 		{"config", "-help"},
 		{"cloud", "-help"},
+		{"service-accounts", "-help"},
 		{"dashboards", "-help"},
 		{"datasources", "-help"},
 		{"folders", "-help"},
 		{"annotations", "-help"},
 		{"alerting", "-help"},
 		{"assistant", "-help"},
+		{"synthetics", "-help"},
 		{"runtime", "-help"},
 		{"aggregate", "-help"},
 		{"incident", "-help"},
@@ -1945,6 +2180,25 @@ func TestAssistantCommands(t *testing.T) {
 	}
 
 	out.Reset()
+	errOut.Reset()
+	if code := app.Run(context.Background(), []string{"--agent", "assistant", "investigate", "--goal", "Investigate checkout latency spike"}); code != 0 {
+		t.Fatalf("assistant investigate should succeed: %s", errOut.String())
+	}
+	if !strings.Contains(client.assistantPrompt, "Goal: Investigate checkout latency spike") {
+		t.Fatalf("assistant investigate prompt not shaped for investigations: %s", client.assistantPrompt)
+	}
+	investigateEnvelope := decodeJSON(t, out.String())
+	if investigateEnvelope["metadata"].(map[string]any)["command"] != "assistant investigate" {
+		t.Fatalf("unexpected assistant investigate metadata: %+v", investigateEnvelope)
+	}
+	if investigateEnvelope["metadata"].(map[string]any)["next_action"] == "" {
+		t.Fatalf("expected assistant investigate next_action")
+	}
+	if investigateEnvelope["data"].(map[string]any)["goal"] != "Investigate checkout latency spike" {
+		t.Fatalf("unexpected assistant investigate payload: %+v", investigateEnvelope["data"])
+	}
+
+	out.Reset()
 	if code := app.Run(context.Background(), []string{"assistant", "status", "--chat-id", "c1"}); code != 0 {
 		t.Fatalf("assistant status should succeed")
 	}
@@ -1975,6 +2229,12 @@ func TestAssistantCommands(t *testing.T) {
 	}
 	if code := app.Run(context.Background(), []string{"assistant", "chat", "--bad"}); code != 1 {
 		t.Fatalf("assistant chat parse should fail")
+	}
+	if code := app.Run(context.Background(), []string{"assistant", "investigate"}); code != 1 {
+		t.Fatalf("assistant investigate missing goal should fail")
+	}
+	if code := app.Run(context.Background(), []string{"assistant", "investigate", "--bad"}); code != 1 {
+		t.Fatalf("assistant investigate parse should fail")
 	}
 	if code := app.Run(context.Background(), []string{"assistant", "status"}); code != 1 {
 		t.Fatalf("assistant status missing chat id should fail")
@@ -2419,6 +2679,12 @@ func TestAppErrorBranches(t *testing.T) {
 	if code := app.Run(context.Background(), []string{"dashboards", "list"}); code != 1 {
 		t.Fatalf("expected dashboards auth error")
 	}
+	if code := app.Run(context.Background(), []string{"service-accounts", "list"}); code != 1 {
+		t.Fatalf("expected service-accounts auth error")
+	}
+	if code := app.Run(context.Background(), []string{"cloud", "access-policies", "list", "--region", "us"}); code != 1 {
+		t.Fatalf("expected cloud access-policies auth error")
+	}
 
 	// runDashboards list and create client error branches + create parse error.
 	store = &fakeStore{cfg: config.Config{Token: "x"}}
@@ -2448,6 +2714,26 @@ func TestAppErrorBranches(t *testing.T) {
 	if code := app.Run(context.Background(), []string{"datasources", "list"}); code != 1 {
 		t.Fatalf("expected datasources client error")
 	}
+	client = &fakeClient{serviceAccountsErr: errors.New("service accounts fail")}
+	app, _, _ = newTestApp(store, client)
+	if code := app.Run(context.Background(), []string{"service-accounts", "list"}); code != 1 {
+		t.Fatalf("expected service-accounts client error")
+	}
+	client = &fakeClient{serviceAccountErr: errors.New("service account fail")}
+	app, _, _ = newTestApp(store, client)
+	if code := app.Run(context.Background(), []string{"service-accounts", "get", "--id", "1"}); code != 1 {
+		t.Fatalf("expected service-account get client error")
+	}
+	client = &fakeClient{cloudAccessErr: errors.New("cloud access fail")}
+	app, _, _ = newTestApp(store, client)
+	if code := app.Run(context.Background(), []string{"cloud", "access-policies", "list", "--region", "us"}); code != 1 {
+		t.Fatalf("expected cloud access-policies client error")
+	}
+	client = &fakeClient{cloudAccessOneErr: errors.New("cloud access get fail")}
+	app, _, _ = newTestApp(store, client)
+	if code := app.Run(context.Background(), []string{"cloud", "access-policies", "get", "--id", "ap-1", "--region", "us"}); code != 1 {
+		t.Fatalf("expected cloud access-policy get client error")
+	}
 
 	// runAssistant auth + client error branches.
 	store = &fakeStore{cfg: config.Config{}}
@@ -2472,6 +2758,11 @@ func TestAppErrorBranches(t *testing.T) {
 	if code := app.Run(context.Background(), []string{"assistant", "skills"}); code != 1 {
 		t.Fatalf("expected assistant skills client error")
 	}
+	client.assistantSkillsErr = nil
+	client.assistantChatErr = errors.New("assistant investigate fail")
+	if code := app.Run(context.Background(), []string{"assistant", "investigate", "--goal", "x"}); code != 1 {
+		t.Fatalf("expected assistant investigate client error")
+	}
 
 	// runRuntime auth + client error branches.
 	store = &fakeStore{cfg: config.Config{}}
@@ -2495,6 +2786,18 @@ func TestAppErrorBranches(t *testing.T) {
 	client.tracesErr = errors.New("traces fail")
 	if code := app.Run(context.Background(), []string{"runtime", "traces", "search", "--query", "{}"}); code != 1 {
 		t.Fatalf("expected runtime traces client error")
+	}
+
+	// runSynthetics client error branches.
+	client = &fakeClient{syntheticChecksErr: errors.New("synthetics fail")}
+	app, _, _ = newTestApp(store, client)
+	if code := app.Run(context.Background(), []string{"synthetics", "checks", "list", "--backend-url", "synthetic-monitoring-api-us-east-0.grafana.net", "--token", "sm-token"}); code != 1 {
+		t.Fatalf("expected synthetics list client error")
+	}
+	client = &fakeClient{syntheticCheckErr: errors.New("synthetic check fail")}
+	app, _, _ = newTestApp(store, client)
+	if code := app.Run(context.Background(), []string{"synthetics", "checks", "get", "--backend-url", "synthetic-monitoring-api-us-east-0.grafana.net", "--token", "sm-token", "--id", "1"}); code != 1 {
+		t.Fatalf("expected synthetic check client error")
 	}
 
 	// runAggregate auth + aggregate error branches.
@@ -2756,8 +3059,40 @@ func TestHelpers(t *testing.T) {
 	if !payloadHasNextPage(map[string]any{"next": "https://next"}) {
 		t.Fatalf("expected payloadHasNextPage to detect next page")
 	}
+	if !payloadHasNextPage(map[string]any{"metadata": map[string]any{"pagination": map[string]any{"nextPage": "/v1/accesspolicies?pageCursor=abc"}}}) {
+		t.Fatalf("expected payloadHasNextPage to detect nested next page")
+	}
 	if payloadHasNextPage([]any{1}) {
 		t.Fatalf("expected payloadHasNextPage to ignore non-map payloads")
+	}
+	if got := mapValue(map[string]any{"a": map[string]any{"b": map[string]any{"c": "d"}}}, "a", "b")["c"]; got != "d" {
+		t.Fatalf("unexpected mapValue result: %+v", got)
+	}
+	if mapValue(map[string]any{"a": 1}, "a") != nil {
+		t.Fatalf("expected nil mapValue for non-map leaf")
+	}
+	if mapValue("scalar", "a") != nil {
+		t.Fatalf("expected nil mapValue for non-map root")
+	}
+	if !strings.Contains(investigationPrompt("Investigate checkout latency"), "Goal: Investigate checkout latency") {
+		t.Fatalf("expected investigationPrompt to embed the goal")
+	}
+	t.Setenv("GRAFANA_SYNTHETICS_BACKEND_URL", "synthetic-monitoring-api-us-east-0.grafana.net")
+	t.Setenv("GRAFANA_SYNTHETICS_TOKEN", "sm-token")
+	if backendURL, token, err := resolveSyntheticsAuth("", ""); err != nil || backendURL != "synthetic-monitoring-api-us-east-0.grafana.net" || token != "sm-token" {
+		t.Fatalf("unexpected resolved synthetics auth: backend=%s token=%s err=%v", backendURL, token, err)
+	}
+	if _, _, err := resolveSyntheticsAuth("", ""); err != nil {
+		// keep env-backed path covered before clearing for the negative assertions below
+		t.Fatalf("expected env-backed resolveSyntheticsAuth to succeed: %v", err)
+	}
+	t.Setenv("GRAFANA_SYNTHETICS_BACKEND_URL", "")
+	t.Setenv("GRAFANA_SYNTHETICS_TOKEN", "")
+	if _, _, err := resolveSyntheticsAuth("", ""); err == nil {
+		t.Fatalf("expected missing synthetics auth error")
+	}
+	if _, err := syntheticCheckGetRequest("", "", 7); err == nil {
+		t.Fatalf("expected syntheticCheckGetRequest error when auth is missing")
 	}
 }
 
