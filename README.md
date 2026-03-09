@@ -33,6 +33,33 @@ grafana synthetics checks list \
 # Search dashboards
 grafana dashboards list --query latency --tag prod
 
+# Inspect one datasource and its health
+grafana datasources get --uid mysql-uid
+grafana datasources health --uid mysql-uid
+
+# List datasource capabilities without losing the raw Grafana payload
+grafana datasources list --type prometheus
+
+# Query a datasource through Grafana using plugin JSON
+grafana datasources mysql query \
+  --uid mysql-uid \
+  --query-json '{"rawSql":"SELECT 1","format":"table"}'
+
+# Use typed flags for documented query-editor workflows
+grafana datasources prometheus query \
+  --uid prometheus-uid \
+  --expr 'sum(rate(http_requests_total[5m])) by (service)' \
+  --min-step 1m
+
+grafana datasources cloudwatch query \
+  --uid cloudwatch-uid \
+  --namespace AWS/EC2 \
+  --metric-name CPUUtilization \
+  --region us-east-1 \
+  --statistic Average \
+  --dimensions InstanceId=i-123 \
+  --match-exact
+
 # Query logs from the last 30 minutes
 grafana runtime logs query --query '{app="checkout"} |= "error"' --start 30m
 
@@ -104,6 +131,11 @@ export PATH="$PATH:$(go env GOPATH)/bin"
 | `dashboards versions --uid ...` | List dashboard version history |
 | `dashboards render --uid ...` | Render a dashboard or panel to PNG |
 | `datasources list` | List datasources with optional type/name filtering |
+| `datasources get --uid ...` | Get one datasource by UID |
+| `datasources health --uid ...` | Run a datasource health check |
+| `datasources resources <get\|post>` | Call plugin resource endpoints |
+| `datasources query --uid ...` | Run a generic datasource query via Grafana |
+| `datasources <family> query --uid ...` | Query a supported datasource family with teachable help |
 
 </details>
 
@@ -134,6 +166,17 @@ export PATH="$PATH:$(go env GOPATH)/bin"
 | `aggregate snapshot` | Query metrics, logs, and traces in one bounded call |
 
 All runtime commands support relative time inputs: `30m`, `1h`, `now-2h`, `2026-03-06T12:00:00Z`.
+
+Datasource query commands also support Grafana-style relative bounds with `--from` and `--to`, defaulting to `now-1h` and `now`.
+
+Family query help is doc-backed. `grafana datasources <family> query --help` and `grafana schema datasources <family> query` include the typed flags, examples, notes, and the matching Grafana documentation URL for that datasource family.
+
+`datasources list` and `datasources get` return normalized agent-friendly fields such as `typed_family`, `typed_flags`, `documentation_url`, and `capabilities`, while preserving the original Grafana datasource object under `raw`.
+
+`incident analyze` and `agent run` now include `datasource_summary` and `query_hints` so an agent can pivot from the high-level investigation result into concrete datasource commands immediately.
+
+Supported datasource families:
+`cloudwatch`, `clickhouse`, `mysql`, `postgres`, `mssql`, `influxdb`, `elasticsearch`, `opensearch`, `graphite`, `prometheus`, `loki`, `tempo`, `azure-monitor`.
 
 </details>
 
