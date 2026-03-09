@@ -1,0 +1,19 @@
+exec grafana auth login --token $GRAFANA_TOKEN --base-url $GRAFANA_BASE_URL --cloud-url $GRAFANA_CLOUD_URL --prom-url $GRAFANA_PROM_URL --logs-url $GRAFANA_LOGS_URL --traces-url $GRAFANA_TRACES_URL --oncall-url $GRAFANA_ONCALL_URL
+stdout '"authenticated":true'
+
+exec grafana incident analyze --goal 'Investigate checkout errors' --metric-expr grafana_cli_test_requests_total --log-query '{app="checkout"}' --trace-query '{}' --start 15m --end now --limit 10
+stdout '"goal":"Investigate checkout errors"'
+stdout '"summary"'
+
+exec grafana query-history list --search checkout
+stdout '"queryHistory"'
+stdout 'checkout'
+
+exec grafana slo list --query checkout
+stdout '"Checkout availability"'
+
+exec grafana irm incidents list --query checkout
+stdout '"Checkout latency spike"'
+
+exec grafana oncall schedules list --query Primary
+stdout '"Primary Operations"'

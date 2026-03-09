@@ -1,0 +1,40 @@
+exec grafana auth login --token $GRAFANA_TOKEN --base-url $GRAFANA_BASE_URL --cloud-url $GRAFANA_CLOUD_URL --prom-url $GRAFANA_PROM_URL --logs-url $GRAFANA_LOGS_URL --traces-url $GRAFANA_TRACES_URL --oncall-url $GRAFANA_ONCALL_URL
+stdout '"authenticated":true'
+
+exec grafana assistant chat --prompt 'Summarize checkout'
+stdout '"chatId":"chat-1"'
+
+exec grafana assistant status --chat-id chat-1
+stdout '"status":"completed"'
+
+exec grafana assistant skills
+stdout '"Investigate incidents"'
+
+exec grafana assistant investigate --goal 'Checkout latency spike'
+stdout '"goal":"Checkout latency spike"'
+
+# The service account name "grafana-cli-integration" is set by test/integration/bootstrap.sh.
+# If the bootstrap script changes the SA name, update this assertion accordingly.
+exec grafana service-accounts list --query grafana-cli-integration
+stdout '"name":"grafana-cli-integration"'
+
+exec grafana service-accounts get --id $GRAFANA_SERVICE_ACCOUNT_ID
+stdout '"name":"grafana-cli-integration"'
+
+exec grafana cloud stacks list
+stdout '"slug":"local-stack"'
+
+exec grafana cloud access-policies list --region us
+stdout '"name":"Local integration policy"'
+
+exec grafana cloud access-policies get --id policy-1 --region us
+stdout '"id":"policy-1"'
+
+exec grafana synthetics checks list --backend-url $GRAFANA_SYNTHETICS_BACKEND_URL --token $GRAFANA_SYNTHETICS_TOKEN
+stdout '"name":"Checkout homepage"'
+
+exec grafana synthetics checks get --backend-url $GRAFANA_SYNTHETICS_BACKEND_URL --token $GRAFANA_SYNTHETICS_TOKEN --id 1
+stdout '"id":1'
+
+exec grafana api GET /api/health
+stdout '"database":"ok"'

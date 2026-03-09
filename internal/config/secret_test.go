@@ -340,11 +340,47 @@ func TestSecretAccountAndDefaultSecretStore(t *testing.T) {
 		t.Fatalf("expected secret account hash to be stable")
 	}
 
+	t.Setenv(disableKeyringEnv, "")
 	store, ok := newDefaultSecretStore(pathA).(*chainSecretStore)
 	if !ok {
 		t.Fatalf("expected default secret store chain")
 	}
 	if len(store.backends) != 2 || store.backends[0].Name() != "keyring" || store.backends[1].Name() != "file" {
 		t.Fatalf("unexpected default backends: %+v", store.backends)
+	}
+}
+
+func TestKeyringDisabled(t *testing.T) {
+	cases := []struct {
+		name  string
+		value string
+		want  bool
+	}{
+		{name: "unset", value: "", want: false},
+		{name: "zero", value: "0", want: false},
+		{name: "false", value: "false", want: false},
+		{name: "no", value: "no", want: false},
+		{name: "off", value: "off", want: false},
+		{name: "one", value: "1", want: true},
+		{name: "true", value: "true", want: true},
+		{name: "yes", value: "yes", want: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := keyringDisabled(tc.value); got != tc.want {
+				t.Fatalf("unexpected disabled state for %q: got %v want %v", tc.value, got, tc.want)
+			}
+		})
+	}
+
+	path := filepath.Join(t.TempDir(), "config.json")
+	t.Setenv(disableKeyringEnv, "1")
+	store, ok := newDefaultSecretStore(path).(*chainSecretStore)
+	if !ok {
+		t.Fatalf("expected default secret store chain")
+	}
+	if len(store.backends) != 1 || store.backends[0].Name() != "file" {
+		t.Fatalf("expected file-only backends when keyring is disabled, got %+v", store.backends)
 	}
 }

@@ -13,6 +13,8 @@ import (
 
 var errSecretNotFound = errors.New("secret not found")
 
+const disableKeyringEnv = "GRAFANA_CLI_DISABLE_KEYRING"
+
 type secretStoreFactory func(configPath string) SecretStore
 
 // SecretStore persists the auth token outside the main config JSON.
@@ -34,16 +36,28 @@ type chainSecretStore struct {
 }
 
 func newDefaultSecretStore(configPath string) SecretStore {
+	backends := make([]secretBackend, 0, 2)
+	if !keyringDisabled(os.Getenv(disableKeyringEnv)) {
+		backends = append(backends, newKeyringBackend(configPath))
+	}
+	backends = append(backends, &fileSecretBackend{path: filepath.Join(filepath.Dir(configPath), "token")})
+
 	return &chainSecretStore{
-		backends: []secretBackend{
-			newKeyringBackend(configPath),
-			&fileSecretBackend{path: filepath.Join(filepath.Dir(configPath), "token")},
-		},
+		backends: backends,
 	}
 }
 
 func newDefaultSecretStoreFactory() secretStoreFactory {
 	return newDefaultSecretStore
+}
+
+func keyringDisabled(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "0", "false", "no", "off":
+		return false
+	default:
+		return true
+	}
 }
 
 func (s *chainSecretStore) Load() (string, string, error) {

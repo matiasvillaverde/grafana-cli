@@ -18,7 +18,7 @@ func TestRun(t *testing.T) {
 	}
 }
 
-func TestMain(t *testing.T) {
+func TestEntrypointMain(t *testing.T) {
 	origExit := exitFn
 	origArgs := os.Args
 	t.Cleanup(func() {

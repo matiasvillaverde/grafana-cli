@@ -1,0 +1,124 @@
+exec grafana auth login --token $GRAFANA_TOKEN --base-url $GRAFANA_BASE_URL --cloud-url $GRAFANA_CLOUD_URL --prom-url $GRAFANA_PROM_URL --logs-url $GRAFANA_LOGS_URL --traces-url $GRAFANA_TRACES_URL --oncall-url $GRAFANA_ONCALL_URL
+stdout '"authenticated":true'
+
+exec sh -c 'grafana api POST /api/folders --yes --body "{\"uid\":\"integration-folder-$GRAFANA_ITEST_RUN_ID\",\"title\":\"Integration Folder\"}"'
+stdout '"title":"Integration Folder"'
+
+exec grafana folders list
+stdout '"title":"Integration Folder"'
+
+exec grafana folders get --uid integration-folder-$GRAFANA_ITEST_RUN_ID
+stdout '"title":"Integration Folder"'
+
+exec sh -c 'body=$(sed "s/__RUN_ID__/$GRAFANA_ITEST_RUN_ID/g" dashboard.json); grafana api POST /api/dashboards/db --yes --body "$body"'
+stdout '"uid":"integration-annotated-'
+
+exec sh -c 'now=$(date +%s000); grafana api POST /api/annotations --yes --body "{\"dashboardUID\":\"integration-annotated-$GRAFANA_ITEST_RUN_ID\",\"panelId\":1,\"time\":${now},\"tags\":[\"integration\",\"error\"],\"text\":\"integration annotation\"}"'
+stdout '"message":"Annotation added"'
+
+exec grafana annotations list --dashboard-uid integration-annotated-$GRAFANA_ITEST_RUN_ID --tags integration,error
+stdout 'integration annotation'
+
+exec sh -c 'body=$(sed "s/__RUN_ID__/$GRAFANA_ITEST_RUN_ID/g" contact-point.json); grafana api POST /api/v1/provisioning/contact-points --yes --body "$body"'
+
+exec sh -c 'body=$(sed "s/__RUN_ID__/$GRAFANA_ITEST_RUN_ID/g" alert-rule.json); grafana api POST /api/v1/provisioning/alert-rules --yes --body "$body"'
+
+exec grafana alerting contact-points list
+stdout '"name":"grafana-cli-integration-contact-'
+
+exec grafana alerting rules list
+stdout '"title":"Grafana CLI Integration Rule"'
+
+exec grafana alerting policies get
+stdout '"receiver"'
+
+exec grafana api DELETE /api/v1/provisioning/alert-rules/grafana-cli-integration-rule-$GRAFANA_ITEST_RUN_ID --yes
+exec sh -c 'grafana api DELETE /api/v1/provisioning/contact-points/grafana-cli-integration-contact-$GRAFANA_ITEST_RUN_ID --yes'
+exec grafana api DELETE /api/dashboards/uid/integration-annotated-$GRAFANA_ITEST_RUN_ID --yes
+exec grafana api DELETE /api/folders/integration-folder-$GRAFANA_ITEST_RUN_ID --yes
+
+-- dashboard.json --
+{
+  "dashboard": {
+    "uid": "integration-annotated-__RUN_ID__",
+    "title": "Integration Annotated Dashboard",
+    "schemaVersion": 39,
+    "version": 0,
+    "panels": [
+      {
+        "id": 1,
+        "type": "text",
+        "title": "Annotated panel",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "options": {
+          "content": "Annotations target",
+          "mode": "markdown"
+        }
+      }
+    ]
+  },
+  "folderUid": "integration-folder-__RUN_ID__",
+  "overwrite": true
+}
+
+-- contact-point.json --
+{
+  "uid": "grafana-cli-integration-contact-__RUN_ID__",
+  "name": "grafana-cli-integration-contact-__RUN_ID__",
+  "type": "email",
+  "settings": {
+    "addresses": "integration@example.com"
+  },
+  "disableResolveMessage": false
+}
+
+-- alert-rule.json --
+{
+  "uid": "grafana-cli-integration-rule-__RUN_ID__",
+  "title": "Grafana CLI Integration Rule",
+  "condition": "A",
+  "data": [
+    {
+      "refId": "A",
+      "relativeTimeRange": {
+        "from": 600,
+        "to": 0
+      },
+      "datasourceUid": "prometheus",
+      "model": {
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "editorMode": "code",
+        "expr": "grafana_cli_test_requests_total",
+        "instant": true,
+        "intervalMs": 1000,
+        "maxDataPoints": 43200,
+        "refId": "A"
+      }
+    }
+  ],
+  "dashboardUid": "",
+  "panelId": 0,
+  "noDataState": "NoData",
+  "execErrState": "Error",
+  "for": "0s",
+  "annotations": {
+    "summary": "Grafana CLI integration rule"
+  },
+  "labels": {
+    "service": "checkout"
+  },
+  "isPaused": false,
+  "notification_settings": {
+    "receiver": "grafana-cli-integration-contact-__RUN_ID__"
+  },
+  "folderUID": "integration-folder-__RUN_ID__",
+  "ruleGroup": "grafana-cli-integration"
+}

@@ -1,0 +1,22 @@
+exec grafana auth login --token $GRAFANA_TOKEN --base-url $GRAFANA_BASE_URL --cloud-url $GRAFANA_CLOUD_URL --prom-url $GRAFANA_PROM_URL --logs-url $GRAFANA_LOGS_URL --traces-url $GRAFANA_TRACES_URL --oncall-url $GRAFANA_ONCALL_URL
+stdout '"authenticated":true'
+
+exec grafana runtime metrics query --expr grafana_cli_test_requests_total --start 15m --end now --step 30s
+stdout '"status":"success"'
+
+exec grafana runtime logs query --query '{app="checkout"}' --start 15m --end now --limit 10
+stdout 'checkout request failed'
+
+exec grafana runtime logs aggregate --query '{app="checkout"}' --start 15m --end now --limit 10
+stdout '"streams":1'
+
+exec grafana runtime traces search --query '{}' --start 15m --end now --limit 10
+stdout '463ac35c9f6413ad48485a3953bb6124'
+
+exec grafana runtime traces aggregate --query '{}' --start 15m --end now --limit 10
+stdout '"trace_matches":'
+
+exec grafana aggregate snapshot --metric-expr grafana_cli_test_requests_total --log-query '{app="checkout"}' --trace-query '{}' --start 15m --end now --limit 10
+stdout '"metrics"'
+stdout '"logs"'
+stdout '"traces"'

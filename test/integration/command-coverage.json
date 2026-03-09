@@ -1,0 +1,101 @@
+{
+  "shards": [
+    {
+      "name": "schema-global-flags",
+      "test": "TestSchemaGlobalFlags",
+      "commands": [
+        "schema"
+      ]
+    },
+    {
+      "name": "auth-config",
+      "test": "TestAuthConfig",
+      "commands": [
+        "auth login",
+        "auth status",
+        "auth doctor",
+        "auth logout",
+        "context list",
+        "context use",
+        "context view",
+        "config list",
+        "config get",
+        "config set"
+      ]
+    },
+    {
+      "name": "dashboards-datasources",
+      "test": "TestDashboardsDatasources",
+      "commands": [
+        "dashboards list",
+        "dashboards get",
+        "dashboards create",
+        "dashboards delete",
+        "dashboards versions",
+        "dashboards render",
+        "datasources list"
+      ]
+    },
+    {
+      "name": "folders-annotations-alerting",
+      "test": "TestFoldersAnnotationsAlerting",
+      "commands": [
+        "api",
+        "folders list",
+        "folders get",
+        "annotations list",
+        "alerting rules list",
+        "alerting contact-points list",
+        "alerting policies get"
+      ]
+    },
+    {
+      "name": "runtime-observability",
+      "test": "TestRuntimeObservability",
+      "commands": [
+        "runtime metrics query",
+        "runtime logs query",
+        "runtime logs aggregate",
+        "runtime traces search",
+        "runtime traces aggregate",
+        "aggregate snapshot"
+      ]
+    },
+    {
+      "name": "investigation-incidents",
+      "test": "TestInvestigationIncidents",
+      "commands": [
+        "query-history list",
+        "slo list",
+        "irm incidents list",
+        "oncall schedules list",
+        "incident analyze"
+      ]
+    },
+    {
+      "name": "assistant-access-cloud",
+      "test": "TestAssistantAccessCloud",
+      "commands": [
+        "cloud stacks list",
+        "cloud access-policies list",
+        "cloud access-policies get",
+        "service-accounts list",
+        "service-accounts get",
+        "assistant chat",
+        "assistant investigate",
+        "assistant status",
+        "assistant skills",
+        "synthetics checks list",
+        "synthetics checks get"
+      ]
+    },
+    {
+      "name": "agent-workflows",
+      "test": "TestAgentWorkflows",
+      "commands": [
+        "agent plan",
+        "agent run"
+      ]
+    }
+  ]
+}

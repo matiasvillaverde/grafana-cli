@@ -1,0 +1,42 @@
+exec grafana auth login --token $GRAFANA_TOKEN --base-url $GRAFANA_BASE_URL --cloud-url $GRAFANA_CLOUD_URL --prom-url $GRAFANA_PROM_URL --logs-url $GRAFANA_LOGS_URL --traces-url $GRAFANA_TRACES_URL --oncall-url $GRAFANA_ONCALL_URL
+stdout '"status":"authenticated"'
+stdout '"authenticated":true'
+
+exec grafana auth status
+stdout '"status":"authenticated"'
+stdout '"authenticated":true'
+
+exec grafana auth doctor
+stdout '"authenticated":true'
+stdout '"name":"runtime_metrics","ok":true'
+stdout '"name":"runtime_logs","ok":true'
+stdout '"name":"runtime_traces","ok":true'
+
+exec grafana auth login --context prod --token $GRAFANA_TOKEN --base-url $GRAFANA_BASE_URL --cloud-url $GRAFANA_CLOUD_URL --prom-url $GRAFANA_PROM_URL --logs-url $GRAFANA_LOGS_URL --traces-url $GRAFANA_TRACES_URL --oncall-url $GRAFANA_ONCALL_URL
+stdout '"context":"prod"'
+
+exec grafana context list
+stdout '"name":"default"'
+stdout '"name":"prod"'
+
+exec grafana context use prod
+stdout '"context":"prod"'
+
+exec grafana context view
+stdout '"context":"prod"'
+
+exec grafana config set org-id 7
+stdout '"org_id":7'
+
+exec grafana config get org-id
+stdout '"key":"org-id"'
+stdout '"value":7'
+
+exec grafana config list
+stdout '"context":"prod"'
+
+exec grafana config get base-url --context default
+stdout '"key":"base-url"'
+
+exec grafana auth logout --yes
+stdout '"status":"logged_out"'

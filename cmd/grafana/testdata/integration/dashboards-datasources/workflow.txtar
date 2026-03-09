@@ -1,0 +1,82 @@
+exec grafana auth login --token $GRAFANA_TOKEN --base-url $GRAFANA_BASE_URL --cloud-url $GRAFANA_CLOUD_URL --prom-url $GRAFANA_PROM_URL --logs-url $GRAFANA_LOGS_URL --traces-url $GRAFANA_TRACES_URL --oncall-url $GRAFANA_ONCALL_URL
+stdout '"authenticated":true'
+
+exec sh -c 'grafana dashboards create --template-json "$(cat dashboard-v1.json)"'
+stdout '"uid":"integration-dash"'
+
+exec grafana dashboards list --query Integration --tag integration
+stdout '"uid":"integration-dash"'
+
+exec grafana dashboards get --uid integration-dash
+stdout '"uid":"integration-dash"'
+stdout '"title":"Integration Dashboard"'
+
+exec sh -c 'grafana dashboards create --template-json "$(cat dashboard-v2.json)"'
+stdout '"uid":"integration-dash"'
+
+exec grafana dashboards versions --uid integration-dash
+stdout '"version":1'
+
+exec grafana dashboards render --uid integration-dash --panel-id 1 --out rendered/panel.png
+stdout '"content_type":"image/png"'
+exists rendered/panel.png
+
+exec grafana datasources list
+stdout '"uid":"prometheus"'
+stdout '"uid":"loki"'
+stdout '"uid":"tempo"'
+
+exec grafana --yes dashboards delete --uid integration-dash
+stdout 'deleted'
+
+-- dashboard-v1.json --
+{
+  "uid": "integration-dash",
+  "title": "Integration Dashboard",
+  "schemaVersion": 39,
+  "version": 0,
+  "tags": ["integration", "smoke"],
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "Overview",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "options": {
+        "content": "Integration dashboard",
+        "mode": "markdown"
+      }
+    }
+  ]
+}
+
+-- dashboard-v2.json --
+{
+  "uid": "integration-dash",
+  "title": "Integration Dashboard",
+  "schemaVersion": 39,
+  "version": 1,
+  "tags": ["integration", "smoke", "updated"],
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "Overview",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "options": {
+        "content": "Integration dashboard updated",
+        "mode": "markdown"
+      }
+    }
+  ]
+}

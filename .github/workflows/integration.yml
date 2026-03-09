@@ -1,0 +1,93 @@
+name: integration
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+concurrency:
+  group: integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration:
+    name: integration (${{ matrix.shard.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - name: schema-global-flags
+            test: TestSchemaGlobalFlags
+          - name: auth-config
+            test: TestAuthConfig
+          - name: dashboards-datasources
+            test: TestDashboardsDatasources
+          - name: folders-annotations-alerting
+            test: TestFoldersAnnotationsAlerting
+          - name: runtime-observability
+            test: TestRuntimeObservability
+          - name: investigation-incidents
+            test: TestInvestigationIncidents
+          - name: assistant-access-cloud
+            test: TestAssistantAccessCloud
+          - name: agent-workflows
+            test: TestAgentWorkflows
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Start integration stack
+        run: docker compose -f test/integration/docker-compose.yml up -d
+
+      - name: Bootstrap Grafana and telemetry data
+        run: ./test/integration/bootstrap.sh test/integration/integration.env
+
+      - name: Run integration shard
+        env:
+          GRAFANA_CLI_DISABLE_KEYRING: "1"
+          INTEGRATION_TEST: ${{ matrix.shard.test }}
+        run: |
+          set -euo pipefail
+          set -a
+          source test/integration/integration.env
+          set +a
+          go test -tags=integration ./cmd/grafana -run "^${INTEGRATION_TEST}$" -count=1
+
+      - name: Collect Docker diagnostics
+        if: failure()
+        run: |
+          mkdir -p artifacts
+          docker compose -f test/integration/docker-compose.yml ps > artifacts/compose-ps.txt
+          docker compose -f test/integration/docker-compose.yml logs > artifacts/compose.log
+
+      - name: Upload Docker diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-diagnostics-${{ matrix.shard.name }}
+          path: artifacts
+          if-no-files-found: ignore
+
+      - name: Stop integration stack
+        if: always()
+        run: docker compose -f test/integration/docker-compose.yml down -v
+
+  integration-summary:
+    if: always()
+    needs: integration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enforce green matrix
+        run: |
+          if [ "${{ needs.integration.result }}" != "success" ]; then
+            echo "At least one integration shard failed."
+            exit 1
+          fi

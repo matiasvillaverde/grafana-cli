@@ -1,0 +1,22 @@
+exec grafana auth login --token $GRAFANA_TOKEN --base-url $GRAFANA_BASE_URL --cloud-url $GRAFANA_CLOUD_URL --prom-url $GRAFANA_PROM_URL --logs-url $GRAFANA_LOGS_URL --traces-url $GRAFANA_TRACES_URL --oncall-url $GRAFANA_ONCALL_URL
+stdout '"authenticated":true'
+
+exec grafana schema --compact runtime
+stdout '"scope":"runtime"'
+stdout '"full_path":"runtime metrics query"'
+
+exec grafana --agent datasources list
+stdout '"status": "success"'
+stdout '"command": "datasources list"'
+
+exec grafana --fields uid datasources list
+stdout '"uid":"prometheus"'
+
+exec grafana --jq '.[] | select(.uid == "prometheus") | .uid' datasources list
+stdout 'prometheus'
+
+exec grafana --template '{{len .}}' datasources list
+stdout '3'
+
+! exec grafana --read-only dashboards create --title blocked
+stderr 'blocked by --read-only: dashboards create mutates state'
