@@ -22,3 +22,17 @@ datasources:
     access: proxy
     url: http://tempo:3200
     editable: false
+
+  - name: Integration ClickHouse
+    type: grafana-clickhouse-datasource
+    uid: clickhouse
+    editable: false
+    jsonData:
+      defaultDatabase: default
+      protocol: http
+      host: clickhouse
+      port: 8123
+      username: grafana
+      tlsSkipVerify: false
+    secureJsonData:
+      password: grafana-integration

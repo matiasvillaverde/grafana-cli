@@ -9,9 +9,11 @@ This suite runs the CLI against a local Grafana stack started with Docker Compos
 - Pushgateway `v1.11.2`
 - Loki pinned by digest
 - Tempo `v2.10.1` pinned by digest and started in single-binary mode
+- ClickHouse `24.8`
 - Grafana image renderer `v5.6.3`
+- Grafana ClickHouse datasource plugin `v4.14.0`
 
-The bootstrap script creates a service-account token and seeds telemetry into Prometheus, Loki, and Tempo.
+The bootstrap script creates a service-account token and seeds telemetry into Prometheus, Loki, Tempo, and ClickHouse.
 
 ## Run locally
 

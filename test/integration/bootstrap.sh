@@ -11,6 +11,9 @@ PUSHGATEWAY_URL="${PUSHGATEWAY_URL:-http://127.0.0.1:9091}"
 LOKI_URL="${LOKI_URL:-http://127.0.0.1:3100}"
 TEMPO_URL="${TEMPO_URL:-http://127.0.0.1:3200}"
 ZIPKIN_URL="${ZIPKIN_URL:-http://127.0.0.1:9411}"
+CLICKHOUSE_URL="${CLICKHOUSE_URL:-http://127.0.0.1:8123}"
+CLICKHOUSE_USER="${CLICKHOUSE_USER:-grafana}"
+CLICKHOUSE_PASSWORD="${CLICKHOUSE_PASSWORD:-grafana-integration}"
 RENDERER_URL="${RENDERER_URL:-http://127.0.0.1:8081}"
 GRAFANA_ADMIN_USER="${GRAFANA_ADMIN_USER:-admin}"
 GRAFANA_ADMIN_PASSWORD="${GRAFANA_ADMIN_PASSWORD:-admin}"
@@ -79,6 +82,11 @@ grafana_api() {
     "${GRAFANA_URL}${path}"
 }
 
+clickhouse_query() {
+  local sql="$1"
+  curl -fsS --user "${CLICKHOUSE_USER}:${CLICKHOUSE_PASSWORD}" "${CLICKHOUSE_URL}/" --data-binary "$sql"
+}
+
 require_cmd curl
 require_cmd jq
 require_cmd perl
@@ -95,6 +103,7 @@ wait_for_http "${GRAFANA_URL}/api/health"
 wait_for_http "${PROM_URL}/-/ready"
 wait_for_http "${LOKI_URL}/ready"
 wait_for_http "${TEMPO_URL}/ready"
+wait_for_http "${CLICKHOUSE_URL}/ping"
 wait_for_http "${RENDERER_URL}/render/version"
 
 service_account_id="$(grafana_api GET "/api/serviceaccounts/search?query=${SERVICE_ACCOUNT_NAME}" \
@@ -154,6 +163,29 @@ jq -nc \
 wait_for_query_result \
   "${LOKI_URL}/loki/api/v1/query_range?query=%7Bapp%3D%22checkout%22%7D&start=$((log_time_one - 1000000))&end=$((log_time_two + 1000000))&limit=10" \
   '.data.result | length > 0'
+
+clickhouse_query "
+  CREATE TABLE IF NOT EXISTS default.grafana_cli_integration_clickhouse (
+    ts DateTime,
+    service String,
+    level String,
+    requests UInt64
+  )
+  ENGINE = MergeTree
+  ORDER BY ts
+"
+
+clickhouse_query "TRUNCATE TABLE default.grafana_cli_integration_clickhouse"
+
+clickhouse_query "
+  INSERT INTO default.grafana_cli_integration_clickhouse (ts, service, level, requests) VALUES
+    ('2026-03-09 10:00:00', 'checkout-clickhouse', 'error', 7),
+    ('2026-03-09 10:05:00', 'payments-clickhouse', 'warn', 3)
+"
+
+wait_for_query_result \
+  "${CLICKHOUSE_URL}/?user=${CLICKHOUSE_USER}&password=${CLICKHOUSE_PASSWORD}&query=SELECT%20count()%20AS%20row_count%20FROM%20default.grafana_cli_integration_clickhouse%20FORMAT%20JSON" \
+  '.data[0].row_count == "2"'
 
 trace_timestamp_us="$(unix_time_us)"
 trace_id="463ac35c9f6413ad48485a3953bb6124"

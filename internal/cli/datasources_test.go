@@ -482,6 +482,15 @@ func TestDatasourceStrategyHelpers(t *testing.T) {
 	if err != nil || queries[0]["rawSql"] != "SELECT 1" {
 		t.Fatalf("unexpected sql strategy query build: %+v err=%v", queries, err)
 	}
+	clickhouseStrategy, _ := findDatasourceStrategy("clickhouse")
+	queries, err = clickhouseStrategy.BuildQueries(sqlOpts, resolvedDatasource{UID: "clickhouse-uid", Type: "grafana-clickhouse-datasource"})
+	if err != nil || queries[0]["rawSql"] != "SELECT 1" || queries[0]["format"] != 1 || queries[0]["editorType"] != "sql" {
+		t.Fatalf("unexpected clickhouse strategy query build: %+v err=%v", queries, err)
+	}
+	queries, err = clickhouseStrategy.BuildQueries(datasourceQueryOptions{SQL: "SELECT 1", Format: "time_series"}, resolvedDatasource{UID: "clickhouse-uid", Type: "grafana-clickhouse-datasource"})
+	if err != nil || queries[0]["format"] != 0 {
+		t.Fatalf("unexpected clickhouse format mapping: %+v err=%v", queries, err)
+	}
 
 	prometheusStrategy, _ := findDatasourceStrategy("prometheus")
 	fs = flag.NewFlagSet("prom", flag.ContinueOnError)
@@ -617,6 +626,9 @@ func TestDatasourceStrategyHelpers(t *testing.T) {
 
 	if len(mysqlStrategy.DiscoveryFlags()) == 0 || len(prometheusStrategy.Examples()) == 0 || len(datasourceQueryFamilies()) == 0 {
 		t.Fatalf("expected datasource strategy metadata")
+	}
+	if clickhouseQueryFormat("table") != 1 || clickhouseQueryFormat("time_series") != 0 || clickhouseQueryFormat("logs") != 2 || clickhouseQueryFormat("traces") != 3 {
+		t.Fatalf("unexpected clickhouse query format mapping")
 	}
 }
 

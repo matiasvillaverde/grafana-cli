@@ -25,6 +25,23 @@ exec grafana datasources list
 stdout '"uid":"prometheus"'
 stdout '"uid":"loki"'
 stdout '"uid":"tempo"'
+stdout '"uid":"clickhouse"'
+
+exec grafana datasources get --uid clickhouse
+stdout '"uid":"clickhouse"'
+stdout '"typed_family":"clickhouse"'
+
+exec grafana datasources health --uid clickhouse
+stdout '"status":"OK"'
+
+exec grafana datasources clickhouse query --uid clickhouse --sql 'SELECT service, level, requests FROM default.grafana_cli_integration_clickhouse ORDER BY ts' --format table
+stdout '"checkout-clickhouse"'
+stdout '"payments-clickhouse"'
+stdout '"requests"'
+
+exec grafana datasources query --uid clickhouse --query-json '{"editorType":"sql","rawSql":"SELECT count() AS row_count FROM default.grafana_cli_integration_clickhouse","format":1}'
+stdout '"row_count"'
+stdout '2'
 
 exec grafana --yes dashboards delete --uid integration-dash
 stdout 'deleted'

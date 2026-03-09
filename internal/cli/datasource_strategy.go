@@ -105,14 +105,33 @@ func (s sqlDatasourceStrategy) BindFlags(fs *flag.FlagSet, opts *datasourceQuery
 
 func (s sqlDatasourceStrategy) BuildQueries(opts datasourceQueryOptions, resolved resolvedDatasource) ([]map[string]any, error) {
 	if strings.TrimSpace(opts.SQL) != "" {
+		query := map[string]any{
+			"rawSql": strings.TrimSpace(opts.SQL),
+		}
+		if s.family.Name == "clickhouse" {
+			query["editorType"] = "sql"
+			query["format"] = clickhouseQueryFormat(normalizeDefault(opts.Format, "table"))
+		} else {
+			query["format"] = normalizeDefault(opts.Format, "table")
+		}
 		return []map[string]any{
-			applyDatasourceQueryDefaults(map[string]any{
-				"rawSql": strings.TrimSpace(opts.SQL),
-				"format": normalizeDefault(opts.Format, "table"),
-			}, resolved.UID, resolved.Type, chooseDefaultRefID(opts.RefID, 0), opts.IntervalMS, opts.MaxDataPoints),
+			applyDatasourceQueryDefaults(query, resolved.UID, resolved.Type, chooseDefaultRefID(opts.RefID, 0), opts.IntervalMS, opts.MaxDataPoints),
 		}, nil
 	}
 	return s.passthroughDatasourceStrategy.BuildQueries(opts, resolved)
+}
+
+func clickhouseQueryFormat(value string) int {
+	switch strings.TrimSpace(strings.ToLower(value)) {
+	case "time_series", "timeseries", "graph":
+		return 0
+	case "logs":
+		return 2
+	case "traces":
+		return 3
+	default:
+		return 1
+	}
 }
 
 type prometheusDatasourceStrategy struct {
