@@ -74,6 +74,12 @@ func selectPlaybook(goal string) Playbook {
 func actionsFor(playbook Playbook) []Action {
 	return []Action{
 		{
+			ID:      "datasource-inventory",
+			Type:    "datasource_inventory",
+			Command: "grafana datasources list",
+			Purpose: "discover datasource instances, typed query adapters, and query help before investigating",
+		},
+		{
 			ID:      "cloud-stacks",
 			Type:    "cloud_inventory",
 			Command: "grafana cloud stacks list",

@@ -29,8 +29,11 @@ func TestBuildPlanSelectsPlaybook(t *testing.T) {
 		if plan.GeneratedAt != now {
 			t.Fatalf("generated time mismatch")
 		}
-		if len(plan.Actions) != 2 {
-			t.Fatalf("expected 2 actions, got %d", len(plan.Actions))
+		if len(plan.Actions) != 3 {
+			t.Fatalf("expected 3 actions, got %d", len(plan.Actions))
+		}
+		if plan.Actions[0].ID != "datasource-inventory" {
+			t.Fatalf("expected datasource inventory action, got %+v", plan.Actions[0])
 		}
 	}
 }

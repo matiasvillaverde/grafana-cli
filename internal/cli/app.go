@@ -36,6 +36,10 @@ type APIClient interface {
 	DashboardVersions(ctx context.Context, uid string, limit int) (any, error)
 	RenderDashboard(ctx context.Context, req grafana.DashboardRenderRequest) (grafana.RenderedDashboard, error)
 	ListDatasources(ctx context.Context) (any, error)
+	GetDatasource(ctx context.Context, uid string) (any, error)
+	DatasourceHealth(ctx context.Context, uid string) (any, error)
+	DatasourceResource(ctx context.Context, method, uid, resourcePath string, body any) (any, error)
+	DatasourceQuery(ctx context.Context, req grafana.DatasourceQueryRequest) (any, error)
 	ListFolders(ctx context.Context) (any, error)
 	GetFolder(ctx context.Context, uid string) (any, error)
 	ServiceAccounts(ctx context.Context, req grafana.ServiceAccountListRequest) (any, error)
@@ -626,34 +630,6 @@ func (a *App) runDashboards(ctx context.Context, opts globalOptions, args []stri
 	}
 }
 
-func (a *App) runDatasources(ctx context.Context, opts globalOptions, args []string) error {
-	if len(args) == 0 || isHelpArg(args[0]) {
-		return a.emitHelp(opts, []string{"datasources"}, true)
-	}
-	if len(args) == 0 || args[0] != "list" {
-		return errors.New("usage: datasources list [--type TYPE] [--name NAME]")
-	}
-
-	fs := flag.NewFlagSet("datasources list", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
-	typeFilter := fs.String("type", "", "datasource type filter")
-	nameFilter := fs.String("name", "", "name substring filter")
-	if err := fs.Parse(args[1:]); err != nil {
-		return err
-	}
-
-	cfg, err := a.requireAuthConfig()
-	if err != nil {
-		return err
-	}
-	result, err := a.NewClient(cfg).ListDatasources(ctx)
-	if err != nil {
-		return err
-	}
-	result = filterDatasources(result, *typeFilter, *nameFilter)
-	return a.emitWithMetadata(opts, result, collectionMetadata("datasources list", result, 0, ""))
-}
-
 func (a *App) runFolders(ctx context.Context, opts globalOptions, args []string) error {
 	if len(args) == 0 || isHelpArg(args[0]) {
 		return a.emitHelp(opts, []string{"folders"}, true)
@@ -1132,6 +1108,7 @@ func (a *App) runIncident(ctx context.Context, opts globalOptions, args []string
 		return err
 	}
 	client := a.NewClient(cfg)
+	datasources, datasourceErr := client.ListDatasources(ctx)
 
 	plan := agent.BuildPlan(*goal, a.Now())
 	req := plan.AggregateRequest(a.Now())
@@ -1164,14 +1141,20 @@ func (a *App) runIncident(ctx context.Context, opts globalOptions, args []string
 	}
 
 	result := map[string]any{
-		"goal":      *goal,
-		"playbook":  plan.Playbook,
-		"request":   req,
-		"summary":   summarizeSnapshot(snapshot),
-		"generated": a.Now().UTC(),
+		"goal":               *goal,
+		"playbook":           plan.Playbook,
+		"request":            req,
+		"summary":            summarizeSnapshot(snapshot),
+		"generated":          a.Now().UTC(),
+		"datasource_summary": datasourceInventorySummary(datasources),
+		"query_hints":        datasourceQueryHints(req, plan.Playbook, datasources),
+	}
+	if datasourceErr != nil {
+		result["warnings"] = []string{"datasource inventory failed: " + datasourceErr.Error()}
 	}
 	if *includeRaw {
 		result["snapshot"] = snapshot
+		result["datasources"] = normalizeDatasourceCollection(datasources)
 	}
 
 	return a.emit(opts, result)
@@ -1288,6 +1271,7 @@ func (a *App) runAgent(ctx context.Context, opts globalOptions, args []string) e
 			return err
 		}
 		client := a.NewClient(cfg)
+		datasources, datasourceErr := client.ListDatasources(ctx)
 		stacks, err := client.CloudStacks(ctx)
 		if err != nil {
 			return err
@@ -1298,15 +1282,21 @@ func (a *App) runAgent(ctx context.Context, opts globalOptions, args []string) e
 			return err
 		}
 		result := map[string]any{
-			"plan":        plan,
-			"request":     req,
-			"summary":     summarizeSnapshot(snapshot),
-			"stack_count": inferCollectionCount(stacks),
-			"executed_at": a.Now().UTC(),
+			"plan":               plan,
+			"request":            req,
+			"summary":            summarizeSnapshot(snapshot),
+			"stack_count":        inferCollectionCount(stacks),
+			"executed_at":        a.Now().UTC(),
+			"datasource_summary": datasourceInventorySummary(datasources),
+			"query_hints":        datasourceQueryHints(req, plan.Playbook, datasources),
+		}
+		if datasourceErr != nil {
+			result["warnings"] = []string{"datasource inventory failed: " + datasourceErr.Error()}
 		}
 		if *includeRaw {
 			result["stacks"] = stacks
 			result["snapshot"] = snapshot
+			result["datasources"] = normalizeDatasourceCollection(datasources)
 		}
 		return a.emit(opts, result)
 	default:

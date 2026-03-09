@@ -15,15 +15,17 @@ type discoveryFlag struct {
 }
 
 type discoveryCommand struct {
-	Name            string
-	Description     string
-	ReadOnly        bool
-	Flags           []discoveryFlag
-	Examples        []string
-	OutputShape     string
-	RelatedCommands []string
-	TokenCost       string
-	Subcommands     []discoveryCommand
+	Name             string
+	Description      string
+	ReadOnly         bool
+	Flags            []discoveryFlag
+	Examples         []string
+	OutputShape      string
+	RelatedCommands  []string
+	TokenCost        string
+	DocumentationURL string
+	Notes            []string
+	Subcommands      []discoveryCommand
 }
 
 type discoveryWorkflow struct {
@@ -198,11 +200,9 @@ func discoveryCatalog() []discoveryCommand {
 		},
 		{
 			Name:        "datasources",
-			Description: "Inspect configured datasources",
+			Description: "Inspect and query datasources through Grafana",
 			ReadOnly:    true,
-			Subcommands: []discoveryCommand{
-				{Name: "list", Description: "List datasources with optional filtering", ReadOnly: true, Flags: []discoveryFlag{{Name: "--type", Type: "string", Description: "Datasource type filter"}, {Name: "--name", Type: "string", Description: "Datasource name substring"}}, Examples: []string{"grafana datasources list --type loki"}, OutputShape: `[{"name":"loki","type":"loki"}]`, RelatedCommands: []string{"runtime logs query", "runtime metrics query"}, TokenCost: "small"},
-			},
+			Subcommands: datasourceDiscoveryCommands(),
 		},
 		{
 			Name:        "folders",
@@ -314,7 +314,7 @@ func discoveryCatalog() []discoveryCommand {
 			Description: "Run a summary-first incident investigation workflow",
 			ReadOnly:    true,
 			Subcommands: []discoveryCommand{
-				{Name: "analyze", Description: "Generate a playbook-driven incident summary", ReadOnly: true, Flags: []discoveryFlag{{Name: "--goal", Type: "string", Description: "Incident goal"}, {Name: "--metric-expr", Type: "string", Description: "Override metric expression"}, {Name: "--log-query", Type: "string", Description: "Override log query"}, {Name: "--trace-query", Type: "string", Description: "Override trace query"}, {Name: "--start", Type: "string", Description: "Time range start"}, {Name: "--end", Type: "string", Description: "Time range end"}, {Name: "--step", Type: "string", Description: "Metrics step"}, {Name: "--limit", Type: "int", Description: "Maximum logs and traces"}, {Name: "--include-raw", Type: "bool", Default: false, Description: "Include the raw snapshot payload"}}, Examples: []string{`grafana incident analyze --goal "Investigate checkout latency spike"`}, OutputShape: `{"goal":"...","summary":{"metrics_series":1}}`, RelatedCommands: []string{"aggregate snapshot", "assistant chat"}, TokenCost: "medium"},
+				{Name: "analyze", Description: "Generate a playbook-driven incident summary", ReadOnly: true, Flags: []discoveryFlag{{Name: "--goal", Type: "string", Description: "Incident goal"}, {Name: "--metric-expr", Type: "string", Description: "Override metric expression"}, {Name: "--log-query", Type: "string", Description: "Override log query"}, {Name: "--trace-query", Type: "string", Description: "Override trace query"}, {Name: "--start", Type: "string", Description: "Time range start"}, {Name: "--end", Type: "string", Description: "Time range end"}, {Name: "--step", Type: "string", Description: "Metrics step"}, {Name: "--limit", Type: "int", Description: "Maximum logs and traces"}, {Name: "--include-raw", Type: "bool", Default: false, Description: "Include the raw snapshot payload"}}, Examples: []string{`grafana incident analyze --goal "Investigate checkout latency spike"`}, OutputShape: `{"goal":"...","summary":{"metrics_series":1},"datasource_summary":{"count":3},"query_hints":[{"family":"prometheus","command":"grafana datasources prometheus query --uid ..."}]}`, RelatedCommands: []string{"aggregate snapshot", "assistant chat", "datasources list"}, TokenCost: "medium"},
 			},
 		},
 		{
@@ -322,11 +322,167 @@ func discoveryCatalog() []discoveryCommand {
 			Description: "Run compact planning and execution workflows for agents",
 			ReadOnly:    true,
 			Subcommands: []discoveryCommand{
-				{Name: "plan", Description: "Return the investigation plan without executing it", ReadOnly: true, Flags: []discoveryFlag{{Name: "--goal", Type: "string", Description: "Automation goal"}, {Name: "--include-raw", Type: "bool", Default: false, Description: "Include raw payloads when running"}}, Examples: []string{`grafana agent plan --goal "Investigate elevated error rate"`}, OutputShape: `{"goal":"...","playbook":[...]}`, RelatedCommands: []string{"agent run", "incident analyze"}, TokenCost: "small"},
-				{Name: "run", Description: "Execute the investigation plan against Grafana", ReadOnly: true, Flags: []discoveryFlag{{Name: "--goal", Type: "string", Description: "Automation goal"}, {Name: "--include-raw", Type: "bool", Default: false, Description: "Include raw payloads"}}, Examples: []string{`grafana agent run --goal "Investigate elevated error rate"`}, OutputShape: `{"plan":{...},"summary":{...}}`, RelatedCommands: []string{"agent plan", "incident analyze"}, TokenCost: "medium"},
+				{Name: "plan", Description: "Return the investigation plan without executing it", ReadOnly: true, Flags: []discoveryFlag{{Name: "--goal", Type: "string", Description: "Automation goal"}, {Name: "--include-raw", Type: "bool", Default: false, Description: "Include raw payloads when running"}}, Examples: []string{`grafana agent plan --goal "Investigate elevated error rate"`}, OutputShape: `{"goal":"...","actions":[{"type":"datasource_inventory","command":"grafana datasources list"}]}`, RelatedCommands: []string{"agent run", "incident analyze", "datasources list"}, TokenCost: "small"},
+				{Name: "run", Description: "Execute the investigation plan against Grafana", ReadOnly: true, Flags: []discoveryFlag{{Name: "--goal", Type: "string", Description: "Automation goal"}, {Name: "--include-raw", Type: "bool", Default: false, Description: "Include raw payloads"}}, Examples: []string{`grafana agent run --goal "Investigate elevated error rate"`}, OutputShape: `{"plan":{...},"summary":{...},"datasource_summary":{"count":3},"query_hints":[{"family":"loki","command":"grafana datasources loki query --uid ..."}]}`, RelatedCommands: []string{"agent plan", "incident analyze", "datasources list"}, TokenCost: "medium"},
 			},
 		},
 	}
+}
+
+func datasourceDiscoveryCommands() []discoveryCommand {
+	commands := []discoveryCommand{
+		{
+			Name:             "list",
+			Description:      "List datasources with optional filtering",
+			ReadOnly:         true,
+			DocumentationURL: "https://grafana.com/docs/grafana/latest/developers/http_api/data_source/",
+			Flags: []discoveryFlag{
+				{Name: "--type", Type: "string", Description: "Datasource type filter"},
+				{Name: "--name", Type: "string", Description: "Datasource name substring"},
+			},
+			Examples:        []string{"grafana datasources list --type loki", "grafana datasources list --name checkout"},
+			OutputShape:     `[{"uid":"loki-uid","name":"loki","type":"loki","typed_family":"loki","documentation_url":"https://grafana.com/docs/grafana/latest/datasources/loki/query-editor/","capabilities":{"typed_query":true},"raw":{"uid":"loki-uid","name":"loki","type":"loki"}}]`,
+			RelatedCommands: []string{"datasources get", "datasources health", "datasources query"},
+			TokenCost:       "small",
+			Notes: []string{
+				"List output is normalized for agents and preserves the original Grafana datasource object under raw.",
+			},
+		},
+		{
+			Name:             "get",
+			Description:      "Get one datasource by UID or unique name",
+			ReadOnly:         true,
+			DocumentationURL: "https://grafana.com/docs/grafana/latest/developers/http_api/data_source/",
+			Flags:            datasourceSelectionDiscoveryFlags(),
+			Examples:         []string{"grafana datasources get --uid loki-uid", "grafana datasources get --name loki --datasource-type loki"},
+			OutputShape:      `{"uid":"loki-uid","name":"loki","type":"loki","typed_family":"loki","typed_flags":["--expr","--query-type"],"help":{"typed_query_help":"grafana datasources loki query --help"},"raw":{"uid":"loki-uid","name":"loki","type":"loki"}}`,
+			RelatedCommands: []string{
+				"datasources list",
+				"datasources health",
+				"datasources query",
+			},
+			TokenCost: "small",
+			Notes: []string{
+				"Get output preserves the raw Grafana payload and adds capability sugar such as typed_family, typed_flags, and help commands.",
+			},
+		},
+		{
+			Name:             "health",
+			Description:      "Run the datasource health check by UID or unique name",
+			ReadOnly:         true,
+			DocumentationURL: "https://grafana.com/docs/grafana/latest/developers/http_api/data_source/",
+			Flags:            datasourceSelectionDiscoveryFlags(),
+			Examples:         []string{"grafana datasources health --uid prometheus-uid", "grafana datasources health --name prometheus"},
+			OutputShape:      `{"status":"OK","message":"Data source is working"}`,
+			RelatedCommands: []string{
+				"datasources get",
+				"datasources query",
+				"auth doctor",
+			},
+			TokenCost: "small",
+		},
+		{
+			Name:             "resources",
+			Description:      "Call datasource resource endpoints exposed by the plugin backend",
+			ReadOnly:         true,
+			DocumentationURL: "https://grafana.com/docs/grafana/latest/developers/http_api/data_source/",
+			Subcommands: []discoveryCommand{
+				{
+					Name:             "get",
+					Description:      "GET one datasource resource path",
+					ReadOnly:         true,
+					DocumentationURL: "https://grafana.com/docs/grafana/latest/developers/http_api/data_source/",
+					Flags: append(datasourceSelectionDiscoveryFlags(),
+						discoveryFlag{Name: "--path", Type: "string", Description: "Resource path below /resources/"},
+					),
+					Examples:        []string{`grafana datasources resources get --uid cloudwatch-uid --path namespaces`, `grafana datasources resources get --name cloudwatch --datasource-type cloudwatch --path namespaces`},
+					OutputShape:     `{"items":[...]}`,
+					RelatedCommands: []string{"datasources get", "datasources resources post", "datasources query"},
+					TokenCost:       "small",
+				},
+				{
+					Name:             "post",
+					Description:      "POST JSON to one datasource resource path",
+					ReadOnly:         true,
+					DocumentationURL: "https://grafana.com/docs/grafana/latest/developers/http_api/data_source/",
+					Flags: append(datasourceSelectionDiscoveryFlags(),
+						discoveryFlag{Name: "--path", Type: "string", Description: "Resource path below /resources/"},
+						discoveryFlag{Name: "--body", Type: "json", Description: "JSON request body"},
+					),
+					Examples:        []string{`grafana datasources resources post --uid clickhouse-uid --path validate --body '{"query":"SELECT 1"}'`},
+					OutputShape:     `{"status":"ok"}`,
+					RelatedCommands: []string{"datasources resources get", "datasources query", "api"},
+					TokenCost:       "small",
+				},
+			},
+		},
+		{
+			Name:             "query",
+			Description:      "Run a generic datasource query via POST /api/ds/query",
+			ReadOnly:         true,
+			DocumentationURL: "https://grafana.com/docs/grafana/latest/developers/http_api/data_source/",
+			Notes: []string{
+				"Use the generic query command when a datasource family has no typed flags for the payload you need.",
+				"Grafana accepts datasource-specific query objects, so unsupported plugin fields should be passed with --query-json or --queries-json.",
+			},
+			Flags:           datasourceQueryDiscoveryFlags(nil),
+			Examples:        []string{`grafana datasources query --uid mysql-uid --query-json '{"rawSql":"SELECT 1","format":"table"}'`, `grafana datasources query --name cloudwatch --datasource-type cloudwatch --queries-json '[{"refId":"A","namespace":"AWS/EC2","metricName":"CPUUtilization","statistics":["Average"],"region":"us-east-1"}]'`},
+			OutputShape:     `{"results":{"A":{"frames":[...]}}}`,
+			RelatedCommands: []string{"datasources get", "datasources health", "api"},
+			TokenCost:       "medium",
+		},
+	}
+	for _, strategy := range datasourceQueryStrategies() {
+		family := strategy.Family()
+		commands = append(commands, discoveryCommand{
+			Name:             family.Name,
+			Description:      family.Description,
+			ReadOnly:         true,
+			DocumentationURL: family.DocumentationURL,
+			Subcommands: []discoveryCommand{
+				{
+					Name:             "query",
+					Description:      "Run a " + family.Name + " datasource query through Grafana",
+					ReadOnly:         true,
+					DocumentationURL: family.DocumentationURL,
+					Notes:            family.Notes,
+					Flags:            datasourceQueryDiscoveryFlags(strategy),
+					Examples:         strategy.Examples(),
+					OutputShape:      `{"results":{"A":{"frames":[...]}}}`,
+					RelatedCommands:  []string{"datasources query", "datasources get", "datasources health"},
+					TokenCost:        "medium",
+				},
+			},
+		})
+	}
+	return commands
+}
+
+func datasourceSelectionDiscoveryFlags() []discoveryFlag {
+	return []discoveryFlag{
+		{Name: "--uid", Type: "string", Description: "Datasource UID"},
+		{Name: "--name", Type: "string", Description: "Datasource name when it resolves uniquely"},
+		{Name: "--datasource-type", Type: "string", Description: "Optional datasource plugin type"},
+	}
+}
+
+func datasourceQueryDiscoveryFlags(strategy datasourceQueryStrategy) []discoveryFlag {
+	flags := append([]discoveryFlag{}, datasourceSelectionDiscoveryFlags()...)
+	flags = append(flags,
+		discoveryFlag{Name: "--from", Type: "string", Default: "now-1h", Description: "Grafana query range start"},
+		discoveryFlag{Name: "--to", Type: "string", Default: "now", Description: "Grafana query range end"},
+		discoveryFlag{Name: "--ref-id", Type: "string", Description: "Override refId for a single query"},
+		discoveryFlag{Name: "--interval-ms", Type: "int", Default: 1000, Description: "Default intervalMs applied to each query"},
+		discoveryFlag{Name: "--max-data-points", Type: "int", Default: 43200, Description: "Default maxDataPoints applied to each query"},
+	)
+	if strategy != nil {
+		flags = append(flags, strategy.DiscoveryFlags()...)
+	}
+	flags = append(flags,
+		discoveryFlag{Name: "--query-json", Type: "json", Description: "One datasource query object"},
+		discoveryFlag{Name: "--queries-json", Type: "json", Description: "Full datasource query array"},
+	)
+	return flags
 }
 
 func discoveryGlobalFlags() []discoveryFlag {
@@ -358,8 +514,12 @@ func discoveryBestPractices(path []string) []string {
 		"Use --json, --jq, or --template to keep responses narrow in agent loops",
 		"Keep default time windows small unless the investigation requires a wider range",
 	}
-	if hasPathPrefix(path, "runtime") || hasPathPrefix(path, "incident") || hasPathPrefix(path, "aggregate") || hasPathPrefix(path, "query-history") {
+	if hasPathPrefix(path, "runtime") || hasPathPrefix(path, "incident") || hasPathPrefix(path, "aggregate") || hasPathPrefix(path, "query-history") || hasPathPrefix(path, "datasources") {
 		practices = append(practices, "Start with a 30m or 1h window, then widen only when the signal is too sparse")
+	}
+	if hasPathPrefix(path, "datasources") {
+		practices = append(practices, "Use datasources get or datasources health before the first query when the datasource capabilities are unclear")
+		practices = append(practices, "Prefer --query-json for one query and --queries-json only when you need multiple refIds in one round trip")
 	}
 	return practices
 }
@@ -373,11 +533,15 @@ func discoveryAntiPatterns(path []string) []string {
 	if hasPathPrefix(path, "runtime") || hasPathPrefix(path, "incident") || hasPathPrefix(path, "aggregate") {
 		antiPatterns = append(antiPatterns, "Do not omit the query goal and then expect the CLI to infer a useful incident scope")
 	}
+	if hasPathPrefix(path, "datasources") {
+		antiPatterns = append(antiPatterns, "Do not assume plugin query JSON is portable across datasource families")
+		antiPatterns = append(antiPatterns, "Do not bypass datasource health and resource endpoints when the plugin exposes discovery helpers you can call first")
+	}
 	return antiPatterns
 }
 
 func discoveryTimeFormatsDoc(path []string) discoveryTimeFormats {
-	if !(hasPathPrefix(path, "runtime") || hasPathPrefix(path, "aggregate") || hasPathPrefix(path, "incident") || hasPathPrefix(path, "query-history") || len(path) == 0) {
+	if !(hasPathPrefix(path, "runtime") || hasPathPrefix(path, "aggregate") || hasPathPrefix(path, "incident") || hasPathPrefix(path, "query-history") || hasPathPrefix(path, "datasources") || len(path) == 0) {
 		return discoveryTimeFormats{}
 	}
 	return discoveryTimeFormats{
@@ -389,13 +553,27 @@ func discoveryTimeFormatsDoc(path []string) discoveryTimeFormats {
 
 func discoveryQuerySyntax(path []string) map[string]string {
 	all := map[string]string{
-		"metrics": `PromQL expressions such as sum(rate(http_requests_total[5m])) by (service)`,
-		"logs":    `LogQL expressions such as {app="checkout"} |= "error"`,
-		"traces":  `TraceQL expressions such as { resource.service.name = "checkout" && span.http.status_code >= 500 }`,
+		"metrics":          `PromQL expressions such as sum(rate(http_requests_total[5m])) by (service)`,
+		"logs":             `LogQL expressions such as {app="checkout"} |= "error"`,
+		"traces":           `TraceQL expressions such as { resource.service.name = "checkout" && span.http.status_code >= 500 }`,
+		"datasource_query": datasourceQuerySyntaxDocs()["datasource_query"],
+	}
+	for key, value := range datasourceQuerySyntaxDocs() {
+		all[key] = value
 	}
 	switch {
 	case len(path) == 0:
 		return all
+	case hasPathPrefix(path, "datasources"):
+		if len(path) >= 2 {
+			if family, ok := findDatasourceQueryFamily(path[1]); ok {
+				return map[string]string{
+					"datasource_query": all["datasource_query"],
+					family.Name:        family.Syntax,
+				}
+			}
+		}
+		return datasourceQuerySyntaxDocs()
 	case hasPathPrefix(path, "runtime", "metrics"):
 		return map[string]string{"metrics": all["metrics"]}
 	case hasPathPrefix(path, "runtime", "logs"):
@@ -432,8 +610,18 @@ func discoveryWorkflows(path []string) []discoveryWorkflow {
 				`grafana --json summary incident analyze --goal "Investigate checkout latency spike"`,
 			},
 		},
+		{
+			Name:      "Inspect A Datasource Safely",
+			TokenCost: "small",
+			Steps: []string{
+				`grafana datasources list --name checkout`,
+				`grafana datasources get --uid mysql-uid`,
+				`grafana datasources health --uid mysql-uid`,
+				`grafana datasources mysql query --uid mysql-uid --query-json '{"rawSql":"SELECT 1","format":"table"}'`,
+			},
+		},
 	}
-	if len(path) == 0 || hasPathPrefix(path, "runtime") || hasPathPrefix(path, "incident") || hasPathPrefix(path, "aggregate") || hasPathPrefix(path, "query-history") || hasPathPrefix(path, "slo") {
+	if len(path) == 0 || hasPathPrefix(path, "runtime") || hasPathPrefix(path, "incident") || hasPathPrefix(path, "aggregate") || hasPathPrefix(path, "query-history") || hasPathPrefix(path, "slo") || hasPathPrefix(path, "datasources") {
 		return workflows
 	}
 	return nil
@@ -477,6 +665,9 @@ func compactCommandPayload(command discoveryCommand, prefix []string) map[string
 
 func fullCommandPayload(command discoveryCommand, prefix []string) map[string]any {
 	payload := compactCommandPayload(command, prefix)
+	if command.DocumentationURL != "" {
+		payload["documentation_url"] = command.DocumentationURL
+	}
 	if command.OutputShape != "" {
 		payload["output_shape"] = command.OutputShape
 	}
@@ -485,6 +676,9 @@ func fullCommandPayload(command discoveryCommand, prefix []string) map[string]an
 	}
 	if len(command.RelatedCommands) > 0 {
 		payload["related_commands"] = command.RelatedCommands
+	}
+	if len(command.Notes) > 0 {
+		payload["notes"] = command.Notes
 	}
 	return payload
 }

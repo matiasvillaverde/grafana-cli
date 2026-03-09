@@ -26,11 +26,12 @@ Investigate the following operational issue in Grafana.
 
 Goal: %s
 
-Respond with:
-1. the most likely impacted services, dashboards, or signals
-2. the next concrete Grafana queries or views to inspect
-3. the top hypotheses and evidence gaps
+	Respond with:
+	1. the most likely impacted services, dashboards, or signals
+	2. the next concrete Grafana queries or views to inspect, including datasource inspection when relevant
+	3. the top hypotheses and evidence gaps
 
-Keep the answer concise, evidence-first, and operational.
-`, strings.TrimSpace(goal)))
+	Prefer the documented datasource query editors and suggest generic datasource JSON only when a typed query path does not fit.
+	Keep the answer concise, evidence-first, and operational.
+	`, strings.TrimSpace(goal)))
 }
