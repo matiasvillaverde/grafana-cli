@@ -84,7 +84,20 @@ grafana_api() {
 
 clickhouse_query() {
   local sql="$1"
-  curl -fsS --user "${CLICKHOUSE_USER}:${CLICKHOUSE_PASSWORD}" "${CLICKHOUSE_URL}/" --data-binary "$sql"
+  local response
+  if ! response="$(curl -fsS --user "${CLICKHOUSE_USER}:${CLICKHOUSE_PASSWORD}" "${CLICKHOUSE_URL}/" --data-binary "$sql")"; then
+    echo "clickhouse query failed" >&2
+    echo "$sql" >&2
+    return 1
+  fi
+  if [[ -n "$response" ]]; then
+    printf '%s\n' "$response"
+  fi
+}
+
+clickhouse_time() {
+  local offset_seconds="${1:-0}"
+  perl -MPOSIX=strftime -e 'my $offset = shift @ARGV; print strftime("%Y-%m-%d %H:%M:%S", gmtime(time + $offset))' -- "$offset_seconds"
 }
 
 require_cmd curl
@@ -177,10 +190,12 @@ clickhouse_query "
 
 clickhouse_query "TRUNCATE TABLE default.grafana_cli_integration_clickhouse"
 
+clickhouse_time_one="$(clickhouse_time -300)"
+clickhouse_time_two="$(clickhouse_time)"
 clickhouse_query "
   INSERT INTO default.grafana_cli_integration_clickhouse (ts, service, level, requests) VALUES
-    ('2026-03-09 10:00:00', 'checkout-clickhouse', 'error', 7),
-    ('2026-03-09 10:05:00', 'payments-clickhouse', 'warn', 3)
+    ('${clickhouse_time_one}', 'checkout-clickhouse', 'error', 7),
+    ('${clickhouse_time_two}', 'payments-clickhouse', 'warn', 3)
 "
 
 wait_for_query_result \

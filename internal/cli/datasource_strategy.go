@@ -84,6 +84,13 @@ type sqlDatasourceStrategy struct {
 	passthroughDatasourceStrategy
 }
 
+const (
+	clickhouseFormatTimeSeries = 0
+	clickhouseFormatTable      = 1
+	clickhouseFormatLogs       = 2
+	clickhouseFormatTraces     = 3
+)
+
 func (s sqlDatasourceStrategy) DiscoveryFlags() []discoveryFlag {
 	return []discoveryFlag{
 		{Name: "--sql", Type: "string", Description: "SQL query text using the macros documented by Grafana for this datasource"},
@@ -104,18 +111,19 @@ func (s sqlDatasourceStrategy) BindFlags(fs *flag.FlagSet, opts *datasourceQuery
 }
 
 func (s sqlDatasourceStrategy) BuildQueries(opts datasourceQueryOptions, resolved resolvedDatasource) ([]map[string]any, error) {
-	if strings.TrimSpace(opts.SQL) != "" {
-		query := map[string]any{
-			"rawSql": strings.TrimSpace(opts.SQL),
+	trimmedSQL := strings.TrimSpace(opts.SQL)
+	if trimmedSQL != "" {
+		queryPayload := map[string]any{
+			"rawSql": trimmedSQL,
 		}
 		if s.family.Name == "clickhouse" {
-			query["editorType"] = "sql"
-			query["format"] = clickhouseQueryFormat(normalizeDefault(opts.Format, "table"))
+			queryPayload["editorType"] = "sql"
+			queryPayload["format"] = clickhouseQueryFormat(normalizeDefault(opts.Format, "table"))
 		} else {
-			query["format"] = normalizeDefault(opts.Format, "table")
+			queryPayload["format"] = normalizeDefault(opts.Format, "table")
 		}
 		return []map[string]any{
-			applyDatasourceQueryDefaults(query, resolved.UID, resolved.Type, chooseDefaultRefID(opts.RefID, 0), opts.IntervalMS, opts.MaxDataPoints),
+			applyDatasourceQueryDefaults(queryPayload, resolved.UID, resolved.Type, chooseDefaultRefID(opts.RefID, 0), opts.IntervalMS, opts.MaxDataPoints),
 		}, nil
 	}
 	return s.passthroughDatasourceStrategy.BuildQueries(opts, resolved)
@@ -124,13 +132,13 @@ func (s sqlDatasourceStrategy) BuildQueries(opts datasourceQueryOptions, resolve
 func clickhouseQueryFormat(value string) int {
 	switch strings.TrimSpace(strings.ToLower(value)) {
 	case "time_series", "timeseries", "graph":
-		return 0
+		return clickhouseFormatTimeSeries
 	case "logs":
-		return 2
+		return clickhouseFormatLogs
 	case "traces":
-		return 3
+		return clickhouseFormatTraces
 	default:
-		return 1
+		return clickhouseFormatTable
 	}
 }
 
