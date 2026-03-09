@@ -219,6 +219,21 @@ type fakeClient struct {
 	renderDashboardReq  grafana.DashboardRenderRequest
 	listDSResult        any
 	listDSErr           error
+	getDSResult         any
+	getDSErr            error
+	getDSUID            string
+	dsHealthResult      any
+	dsHealthErr         error
+	dsHealthUID         string
+	dsResourceResult    any
+	dsResourceErr       error
+	dsResourceMethod    string
+	dsResourceUID       string
+	dsResourcePath      string
+	dsResourceBody      any
+	dsQueryResult       any
+	dsQueryErr          error
+	dsQueryReq          grafana.DatasourceQueryRequest
 	listFoldersResult   any
 	listFoldersErr      error
 	getFolderResult     any
@@ -338,6 +353,29 @@ func (f *fakeClient) RenderDashboard(_ context.Context, req grafana.DashboardRen
 
 func (f *fakeClient) ListDatasources(_ context.Context) (any, error) {
 	return f.listDSResult, f.listDSErr
+}
+
+func (f *fakeClient) GetDatasource(_ context.Context, uid string) (any, error) {
+	f.getDSUID = uid
+	return f.getDSResult, f.getDSErr
+}
+
+func (f *fakeClient) DatasourceHealth(_ context.Context, uid string) (any, error) {
+	f.dsHealthUID = uid
+	return f.dsHealthResult, f.dsHealthErr
+}
+
+func (f *fakeClient) DatasourceResource(_ context.Context, method, uid, resourcePath string, body any) (any, error) {
+	f.dsResourceMethod = method
+	f.dsResourceUID = uid
+	f.dsResourcePath = resourcePath
+	f.dsResourceBody = body
+	return f.dsResourceResult, f.dsResourceErr
+}
+
+func (f *fakeClient) DatasourceQuery(_ context.Context, req grafana.DatasourceQueryRequest) (any, error) {
+	f.dsQueryReq = req
+	return f.dsQueryResult, f.dsQueryErr
 }
 
 func (f *fakeClient) ListFolders(_ context.Context) (any, error) {
@@ -820,8 +858,8 @@ func TestAPICloudDashboardDatasourceCommands(t *testing.T) {
 		searchDashResult: []any{map[string]any{"uid": "x"}},
 		createDashResult: map[string]any{"status": "success"},
 		listDSResult: []any{
-			map[string]any{"name": "prom", "type": "prometheus"},
-			map[string]any{"name": "loki", "type": "loki"},
+			map[string]any{"uid": "prom-uid", "name": "prom", "type": "prometheus"},
+			map[string]any{"uid": "loki-uid", "name": "loki", "type": "loki"},
 		},
 	}
 	app, out, errOut := newTestApp(store, client)
@@ -915,8 +953,11 @@ func TestAPICloudDashboardDatasourceCommands(t *testing.T) {
 	if err := json.Unmarshal([]byte(out.String()), &filtered); err != nil {
 		t.Fatalf("unexpected datasource JSON: %v", err)
 	}
-	if len(filtered) != 1 || filtered[0]["type"] != "loki" {
+	if len(filtered) != 1 || filtered[0]["type"] != "loki" || filtered[0]["typed_family"] != "loki" {
 		t.Fatalf("unexpected datasource filter output: %+v", filtered)
+	}
+	if filtered[0]["raw"].(map[string]any)["type"] != "loki" {
+		t.Fatalf("expected datasource raw payload preservation: %+v", filtered[0])
 	}
 	if code := app.Run(context.Background(), []string{"datasources", "bad"}); code != 1 {
 		t.Fatalf("invalid datasources usage should fail")
@@ -1318,6 +1359,17 @@ func TestCloudAccessServiceAccountsAndSyntheticsValidation(t *testing.T) {
 	}
 
 	out.Reset()
+	if code := app.Run(context.Background(), []string{"synthetics", "--help"}); code != 0 {
+		t.Fatalf("synthetics explicit help should succeed")
+	}
+	if _, ok := decodeJSON(t, out.String())["commands"]; !ok {
+		t.Fatalf("expected explicit synthetics help output")
+	}
+	if err := app.runSynthetics(context.Background(), globalOptions{}, []string{"--help"}); err != nil {
+		t.Fatalf("expected direct synthetics help to succeed: %v", err)
+	}
+
+	out.Reset()
 	errOut.Reset()
 	if code := app.Run(context.Background(), []string{"synthetics", "checks", "list", "--backend-url", "synthetic-monitoring-api-us-east-0.grafana.net"}); code != 1 {
 		t.Fatalf("synthetics checks list missing token should fail")
@@ -1363,6 +1415,17 @@ func TestGroupHelpWithoutAuth(t *testing.T) {
 		if _, ok := decodeJSON(t, out.String())["commands"]; !ok {
 			t.Fatalf("expected commands output for %v", args)
 		}
+	}
+
+	t.Setenv("GRAFANA_SYNTHETICS_BACKEND_URL", "")
+	t.Setenv("GRAFANA_SYNTHETICS_TOKEN", "")
+	out.Reset()
+	errOut.Reset()
+	if code := app.Run(context.Background(), []string{"synthetics", "checks", "get", "--id", "1"}); code != 1 {
+		t.Fatalf("expected synthetics get missing auth failure")
+	}
+	if !strings.Contains(errOut.String(), "--backend-url is required") {
+		t.Fatalf("expected synthetics get auth validation error, got %s", errOut.String())
 	}
 }
 
@@ -2254,6 +2317,11 @@ func TestRuntimeAggregateIncidentAgent(t *testing.T) {
 	store := &fakeStore{cfg: config.Config{Token: "token"}}
 	client := &fakeClient{
 		metricsResult: map[string]any{"m": 1},
+		listDSResult: []any{
+			map[string]any{"uid": "prom-uid", "name": "prometheus", "type": "prometheus"},
+			map[string]any{"uid": "loki-uid", "name": "loki", "type": "loki"},
+			map[string]any{"uid": "tempo-uid", "name": "tempo", "type": "tempo"},
+		},
 		logsResult: map[string]any{
 			"data": map[string]any{
 				"result": []any{
@@ -2408,14 +2476,24 @@ func TestRuntimeAggregateIncidentAgent(t *testing.T) {
 	if summary["metrics_series"].(float64) != 2 {
 		t.Fatalf("unexpected incident summary: %+v", summary)
 	}
+	if inc["datasource_summary"].(map[string]any)["count"].(float64) != 3 {
+		t.Fatalf("expected incident datasource summary: %+v", inc)
+	}
+	if len(inc["query_hints"].([]any)) != 3 {
+		t.Fatalf("expected incident query hints: %+v", inc)
+	}
 	if code := app.Run(context.Background(), []string{"incident", "analyze"}); code != 1 {
 		t.Fatalf("missing goal should fail")
 	}
 	if code := app.Run(context.Background(), []string{"incident", "bad"}); code != 1 {
 		t.Fatalf("incident usage should fail")
 	}
+	out.Reset()
 	if code := app.Run(context.Background(), []string{"incident", "analyze", "--goal", "slow", "--metric-expr", "m", "--log-query", "l", "--trace-query", "t", "--start", "s", "--end", "e", "--step", "1m", "--limit", "10", "--include-raw"}); code != 0 {
 		t.Fatalf("incident include-raw should succeed")
+	}
+	if len(decodeJSON(t, out.String())["datasources"].([]any)) != 3 {
+		t.Fatalf("expected incident raw datasource inventory")
 	}
 
 	out.Reset()
@@ -2426,11 +2504,26 @@ func TestRuntimeAggregateIncidentAgent(t *testing.T) {
 	if plan["playbook"] != "latency" {
 		t.Fatalf("expected latency playbook")
 	}
+	if plan["actions"].([]any)[0].(map[string]any)["id"] != "datasource-inventory" {
+		t.Fatalf("expected datasource inventory action in plan: %+v", plan)
+	}
+	out.Reset()
 	if code := app.Run(context.Background(), []string{"agent", "run", "--goal", "errors"}); code != 0 {
 		t.Fatalf("agent run should succeed")
 	}
+	agentResult := decodeJSON(t, out.String())
+	if agentResult["datasource_summary"].(map[string]any)["count"].(float64) != 3 {
+		t.Fatalf("expected agent datasource summary: %+v", agentResult)
+	}
+	if len(agentResult["query_hints"].([]any)) != 3 {
+		t.Fatalf("expected agent query hints: %+v", agentResult)
+	}
+	out.Reset()
 	if code := app.Run(context.Background(), []string{"agent", "run", "--goal", "errors", "--include-raw"}); code != 0 {
 		t.Fatalf("agent include-raw should succeed")
+	}
+	if len(decodeJSON(t, out.String())["datasources"].([]any)) != 3 {
+		t.Fatalf("expected agent raw datasource inventory")
 	}
 	if code := app.Run(context.Background(), []string{"agent", "bad", "--goal", "x"}); code != 1 {
 		t.Fatalf("unknown agent command should fail")
@@ -2828,6 +2921,15 @@ func TestAppErrorBranches(t *testing.T) {
 		t.Fatalf("expected incident aggregate error")
 	}
 
+	client = &fakeClient{listDSErr: errors.New("datasource inventory fail"), aggregateResult: grafana.AggregateSnapshot{}}
+	app, out, _ := newTestApp(store, client)
+	if code := app.Run(context.Background(), []string{"incident", "analyze", "--goal", "x"}); code != 0 {
+		t.Fatalf("expected incident warning path success")
+	}
+	if len(decodeJSON(t, out.String())["warnings"].([]any)) != 1 {
+		t.Fatalf("expected incident datasource warning")
+	}
+
 	// runAgent parse + auth + cloud + aggregate error branches.
 	store = &fakeStore{cfg: config.Config{Token: "x"}}
 	client = &fakeClient{}
@@ -2853,6 +2955,15 @@ func TestAppErrorBranches(t *testing.T) {
 	app, _, _ = newTestApp(store, client)
 	if code := app.Run(context.Background(), []string{"agent", "run", "--goal", "x"}); code != 1 {
 		t.Fatalf("expected agent aggregate error")
+	}
+
+	client = &fakeClient{listDSErr: errors.New("datasource inventory fail"), cloudResult: map[string]any{"items": []any{}}, aggregateResult: grafana.AggregateSnapshot{}}
+	app, out, _ = newTestApp(store, client)
+	if code := app.Run(context.Background(), []string{"agent", "run", "--goal", "x"}); code != 0 {
+		t.Fatalf("expected agent warning path success")
+	}
+	if len(decodeJSON(t, out.String())["warnings"].([]any)) != 1 {
+		t.Fatalf("expected agent datasource warning")
 	}
 }
 
