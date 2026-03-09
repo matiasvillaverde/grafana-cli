@@ -61,6 +61,24 @@ wait_for_query_result() {
   exit 1
 }
 
+wait_for_clickhouse_query_result() {
+  local sql="$1"
+  local jq_filter="$2"
+  local attempts="${3:-30}"
+  local delay="${4:-2}"
+
+  for ((i = 1; i <= attempts; i++)); do
+    if clickhouse_query "${sql} FORMAT JSON" | jq -e "$jq_filter" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep "$delay"
+  done
+
+  echo "timed out waiting for ClickHouse query result" >&2
+  echo "$sql" >&2
+  exit 1
+}
+
 grafana_api() {
   local method="$1"
   local path="$2"
@@ -198,8 +216,8 @@ clickhouse_query "
     ('${clickhouse_time_two}', 'payments-clickhouse', 'warn', 3)
 "
 
-wait_for_query_result \
-  "${CLICKHOUSE_URL}/?user=${CLICKHOUSE_USER}&password=${CLICKHOUSE_PASSWORD}&query=SELECT%20count()%20AS%20row_count%20FROM%20default.grafana_cli_integration_clickhouse%20FORMAT%20JSON" \
+wait_for_clickhouse_query_result \
+  "SELECT count() AS row_count FROM default.grafana_cli_integration_clickhouse" \
   '.data[0].row_count == "2"'
 
 trace_timestamp_us="$(unix_time_us)"
