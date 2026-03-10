@@ -6,6 +6,7 @@ services:
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_INSTALL_PLUGINS: grafana-clickhouse-datasource 4.14.0
       GF_RENDERING_SERVER_URL: http://renderer:8081/render
       GF_RENDERING_CALLBACK_URL: http://grafana:3000/
       GF_RENDERING_IGNORE_HTTPS_ERRORS: "true"
@@ -15,6 +16,7 @@ services:
       - prometheus
       - loki
       - tempo
+      - clickhouse
       - renderer
 
   renderer:
@@ -59,3 +61,12 @@ services:
       - "9411:9411"
     volumes:
       - ./tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8@sha256:1ffa82edee000a42c09313bd9f1293d94c570aee74babc1b3ca9983a35fa597b
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: grafana
+      CLICKHOUSE_PASSWORD: grafana-integration
+    ports:
+      - "8123:8123"

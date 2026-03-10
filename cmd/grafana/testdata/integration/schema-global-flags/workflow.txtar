@@ -16,7 +16,7 @@ exec grafana --jq '.[] | select(.uid == "prometheus") | .uid' datasources list
 stdout 'prometheus'
 
 exec grafana --template '{{len .}}' datasources list
-stdout '3'
+stdout '4'
 
 ! exec grafana --read-only dashboards create --title blocked
 stderr 'blocked by --read-only: dashboards create mutates state'

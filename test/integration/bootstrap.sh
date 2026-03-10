@@ -11,9 +11,14 @@ PUSHGATEWAY_URL="${PUSHGATEWAY_URL:-http://127.0.0.1:9091}"
 LOKI_URL="${LOKI_URL:-http://127.0.0.1:3100}"
 TEMPO_URL="${TEMPO_URL:-http://127.0.0.1:3200}"
 ZIPKIN_URL="${ZIPKIN_URL:-http://127.0.0.1:9411}"
+CLICKHOUSE_URL="${CLICKHOUSE_URL:-http://127.0.0.1:8123}"
+CLICKHOUSE_USER="${CLICKHOUSE_USER:-grafana}"
+CLICKHOUSE_PASSWORD="${CLICKHOUSE_PASSWORD:-grafana-integration}"
 RENDERER_URL="${RENDERER_URL:-http://127.0.0.1:8081}"
 GRAFANA_ADMIN_USER="${GRAFANA_ADMIN_USER:-admin}"
 GRAFANA_ADMIN_PASSWORD="${GRAFANA_ADMIN_PASSWORD:-admin}"
+GRAFANA_HEALTH_ATTEMPTS="${GRAFANA_HEALTH_ATTEMPTS:-120}"
+GRAFANA_HEALTH_DELAY="${GRAFANA_HEALTH_DELAY:-2}"
 SERVICE_ACCOUNT_NAME="${SERVICE_ACCOUNT_NAME:-grafana-cli-integration}"
 TOKEN_NAME="${TOKEN_NAME:-grafana-cli-integration-token}"
 SYNTHETICS_TOKEN="${SYNTHETICS_TOKEN:-synthetics-integration-token}"
@@ -58,6 +63,24 @@ wait_for_query_result() {
   exit 1
 }
 
+wait_for_clickhouse_query_result() {
+  local sql="$1"
+  local jq_filter="$2"
+  local attempts="${3:-30}"
+  local delay="${4:-2}"
+
+  for ((i = 1; i <= attempts; i++)); do
+    if clickhouse_query "${sql} FORMAT JSON" | jq -e "$jq_filter" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep "$delay"
+  done
+
+  echo "timed out waiting for ClickHouse query result" >&2
+  echo "$sql" >&2
+  exit 1
+}
+
 grafana_api() {
   local method="$1"
   local path="$2"
@@ -79,6 +102,24 @@ grafana_api() {
     "${GRAFANA_URL}${path}"
 }
 
+clickhouse_query() {
+  local sql="$1"
+  local response
+  if ! response="$(curl -fsS --user "${CLICKHOUSE_USER}:${CLICKHOUSE_PASSWORD}" "${CLICKHOUSE_URL}/" --data-binary "$sql")"; then
+    echo "clickhouse query failed" >&2
+    echo "$sql" >&2
+    return 1
+  fi
+  if [[ -n "$response" ]]; then
+    printf '%s\n' "$response"
+  fi
+}
+
+clickhouse_time() {
+  local offset_seconds="${1:-0}"
+  perl -MPOSIX=strftime -e 'my $offset = shift @ARGV; print strftime("%Y-%m-%d %H:%M:%S", gmtime(time + $offset))' -- "$offset_seconds"
+}
+
 require_cmd curl
 require_cmd jq
 require_cmd perl
@@ -91,10 +132,13 @@ unix_time_us() {
   perl -MTime::HiRes=time -e 'printf "%.0f\n", time() * 1000000'
 }
 
-wait_for_http "${GRAFANA_URL}/api/health"
+# Grafana can take longer to become healthy on fresh GitHub runners because it
+# installs plugins during startup.
+wait_for_http "${GRAFANA_URL}/api/health" "${GRAFANA_HEALTH_ATTEMPTS}" "${GRAFANA_HEALTH_DELAY}"
 wait_for_http "${PROM_URL}/-/ready"
 wait_for_http "${LOKI_URL}/ready"
 wait_for_http "${TEMPO_URL}/ready"
+wait_for_http "${CLICKHOUSE_URL}/ping"
 wait_for_http "${RENDERER_URL}/render/version"
 
 service_account_id="$(grafana_api GET "/api/serviceaccounts/search?query=${SERVICE_ACCOUNT_NAME}" \
@@ -154,6 +198,31 @@ jq -nc \
 wait_for_query_result \
   "${LOKI_URL}/loki/api/v1/query_range?query=%7Bapp%3D%22checkout%22%7D&start=$((log_time_one - 1000000))&end=$((log_time_two + 1000000))&limit=10" \
   '.data.result | length > 0'
+
+clickhouse_query "
+  CREATE TABLE IF NOT EXISTS default.grafana_cli_integration_clickhouse (
+    ts DateTime,
+    service String,
+    level String,
+    requests UInt64
+  )
+  ENGINE = MergeTree
+  ORDER BY ts
+"
+
+clickhouse_query "TRUNCATE TABLE default.grafana_cli_integration_clickhouse"
+
+clickhouse_time_one="$(clickhouse_time -300)"
+clickhouse_time_two="$(clickhouse_time)"
+clickhouse_query "
+  INSERT INTO default.grafana_cli_integration_clickhouse (ts, service, level, requests) VALUES
+    ('${clickhouse_time_one}', 'checkout-clickhouse', 'error', 7),
+    ('${clickhouse_time_two}', 'payments-clickhouse', 'warn', 3)
+"
+
+wait_for_clickhouse_query_result \
+  "SELECT count() AS row_count FROM default.grafana_cli_integration_clickhouse" \
+  '.data[0].row_count == "2"'
 
 trace_timestamp_us="$(unix_time_us)"
 trace_id="463ac35c9f6413ad48485a3953bb6124"
