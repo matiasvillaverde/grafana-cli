@@ -54,7 +54,8 @@ func TestRenderHomebrewFormula(t *testing.T) {
 		`version "1.2.3"`,
 		`https://github.com/matiasvillaverde/grafana-cli/releases/download/v1.2.3/grafana_v1.2.3_darwin_arm64.tar.gz`,
 		`sha256 "333"`,
-		`bin.install "grafana"`,
+		`binary = Dir["grafana", "grafana_*"].find { |path| File.file?(path) }`,
+		`bin.install binary => "grafana"`,
 		`assert_match "auth"`,
 	} {
 		if !strings.Contains(formula, part) {

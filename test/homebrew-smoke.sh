@@ -11,11 +11,13 @@ TMP_ROOT="$(mktemp -d)"
 RELEASE_DIR="${TMP_ROOT}/release"
 VERSION="v0.0.0-test"
 FORMULA_PATH="${TMP_ROOT}/grafana-cli.rb"
-TAP_NAME="local/grafana-cli-smoke-$PPID"
+TAP_NAMES=""
 
 cleanup() {
   HOMEBREW_NO_AUTO_UPDATE=1 brew uninstall --formula grafana-cli >/dev/null 2>&1 || true
-  HOMEBREW_NO_AUTO_UPDATE=1 brew untap "${TAP_NAME}" >/dev/null 2>&1 || true
+  for tap_name in ${TAP_NAMES}; do
+    HOMEBREW_NO_AUTO_UPDATE=1 brew untap "${tap_name}" >/dev/null 2>&1 || true
+  done
   if [ -n "${SERVER_PID:-}" ]; then
     kill "${SERVER_PID}" >/dev/null 2>&1 || true
   fi
@@ -38,20 +40,67 @@ case "$(uname -m)" in
 esac
 
 GOOS="${OS}" GOARCH="${ARCH}" CGO_ENABLED=0 go build -trimpath -o "${RELEASE_DIR}/grafana" ./cmd/grafana
+VERSIONED_BINARY="grafana_${VERSION}_${OS}_${ARCH}"
+cp "${RELEASE_DIR}/grafana" "${RELEASE_DIR}/${VERSIONED_BINARY}"
 
-for target in darwin_amd64 darwin_arm64 linux_amd64 linux_arm64; do
-  ARCHIVE="grafana_${VERSION}_${target}.tar.gz"
-  tar -C "${RELEASE_DIR}" -czf "${RELEASE_DIR}/${ARCHIVE}" grafana
-done
+pack_archives() {
+  layout="$1"
 
-(
-  cd "${RELEASE_DIR}"
-  if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum *.tar.gz > checksums.txt
-  else
-    shasum -a 256 *.tar.gz > checksums.txt
-  fi
-)
+  rm -f "${RELEASE_DIR}"/*.tar.gz "${RELEASE_DIR}/checksums.txt"
+  for target in darwin_amd64 darwin_arm64 linux_amd64 linux_arm64; do
+    ARCHIVE="grafana_${VERSION}_${target}.tar.gz"
+    case "$layout" in
+      flat)
+        tar -C "${RELEASE_DIR}" -czf "${RELEASE_DIR}/${ARCHIVE}" grafana
+        ;;
+      versioned)
+        tar -C "${RELEASE_DIR}" -czf "${RELEASE_DIR}/${ARCHIVE}" "${VERSIONED_BINARY}"
+        ;;
+      *)
+        echo "unsupported archive layout: ${layout}" >&2
+        exit 1
+        ;;
+    esac
+  done
+
+  (
+    cd "${RELEASE_DIR}"
+    if command -v sha256sum >/dev/null 2>&1; then
+      sha256sum *.tar.gz > checksums.txt
+    else
+      shasum -a 256 *.tar.gz > checksums.txt
+    fi
+  )
+}
+
+verify_install() {
+  layout="$1"
+  TAP_NAME="local/grafana-cli-smoke-$PPID-$layout"
+  TAP_NAMES="${TAP_NAMES} ${TAP_NAME}"
+
+  pack_archives "${layout}"
+
+  go run ./cmd/release-assets homebrew \
+    --repo matiasvillaverde/grafana-cli \
+    --tag "${VERSION}" \
+    --download-base-url "http://127.0.0.1:${PORT}" \
+    --checksums "${RELEASE_DIR}/checksums.txt" > "${FORMULA_PATH}"
+
+  HOMEBREW_NO_AUTO_UPDATE=1 brew tap-new "${TAP_NAME}" --no-git >/dev/null
+  TAP_DIR="$(brew --repo "${TAP_NAME}")"
+  mkdir -p "${TAP_DIR}/Formula"
+  cp "${FORMULA_PATH}" "${TAP_DIR}/Formula/grafana-cli.rb"
+
+  HOMEBREW_NO_AUTO_UPDATE=1 brew install "${TAP_NAME}/grafana-cli"
+  HOMEBREW_NO_AUTO_UPDATE=1 brew test grafana-cli
+
+  BREW_BIN="$(brew --prefix)/bin/grafana"
+  HELP_OUTPUT="$("${BREW_BIN}" help)"
+  printf '%s\n' "${HELP_OUTPUT}" | grep '"auth"'
+
+  HOMEBREW_NO_AUTO_UPDATE=1 brew uninstall --formula grafana-cli >/dev/null
+  HOMEBREW_NO_AUTO_UPDATE=1 brew untap "${TAP_NAME}" >/dev/null
+}
 
 PORT="$(python3 - <<'PY'
 import socket
@@ -66,20 +115,5 @@ python3 -m http.server "${PORT}" --bind 127.0.0.1 --directory "${RELEASE_DIR}" >
 SERVER_PID=$!
 sleep 1
 
-go run ./cmd/release-assets homebrew \
-  --repo matiasvillaverde/grafana-cli \
-  --tag "${VERSION}" \
-  --download-base-url "http://127.0.0.1:${PORT}" \
-  --checksums "${RELEASE_DIR}/checksums.txt" > "${FORMULA_PATH}"
-
-HOMEBREW_NO_AUTO_UPDATE=1 brew tap-new "${TAP_NAME}" --no-git >/dev/null
-TAP_DIR="$(brew --repo "${TAP_NAME}")"
-mkdir -p "${TAP_DIR}/Formula"
-cp "${FORMULA_PATH}" "${TAP_DIR}/Formula/grafana-cli.rb"
-
-HOMEBREW_NO_AUTO_UPDATE=1 brew install "${TAP_NAME}/grafana-cli"
-HOMEBREW_NO_AUTO_UPDATE=1 brew test grafana-cli
-
-BREW_BIN="$(brew --prefix)/bin/grafana"
-HELP_OUTPUT="$("${BREW_BIN}" help)"
-printf '%s\n' "${HELP_OUTPUT}" | grep '"auth"'
+verify_install flat
+verify_install versioned

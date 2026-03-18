@@ -143,7 +143,9 @@ var homebrewFormulaTemplate = template.Must(template.New("homebrew").Parse(`clas
   end
 
   def install
-    bin.install "grafana"
+    binary = Dir["grafana", "grafana_*"].find { |path| File.file?(path) }
+    odie "expected grafana binary in release archive" unless binary
+    bin.install binary => "grafana"
   end
 
   test do
