@@ -81,6 +81,28 @@ verify_install() {
   printf '%s\n' "${HELP_OUTPUT}" | grep '"auth"'
 }
 
+verify_install_prefers_path_bindir() {
+  home_dir="${TMP_ROOT}/home"
+  bindir="${home_dir}/.local/bin"
+
+  rm -rf "${bindir}"
+  mkdir -p "${bindir}"
+  pack_archive flat
+
+  INSTALL_OUTPUT="$(
+    PATH="${bindir}:/usr/bin:/bin:/usr/sbin:/sbin" \
+    HOME="${home_dir}" \
+    GRAFANA_INSTALL_VERSION="${VERSION}" \
+    GRAFANA_INSTALL_BASE_URL="http://127.0.0.1:${PORT}" \
+    sh scripts/install.sh
+  )"
+
+  HELP_OUTPUT="$("${bindir}/grafana" help)"
+
+  printf '%s\n' "${INSTALL_OUTPUT}" | grep "Installed grafana ${VERSION} to ${bindir}/grafana"
+  printf '%s\n' "${HELP_OUTPUT}" | grep '"auth"'
+}
+
 PORT="$(python3 - <<'PY'
 import socket
 s = socket.socket()
@@ -96,3 +118,4 @@ sleep 1
 
 verify_install flat
 verify_install versioned
+verify_install_prefers_path_bindir

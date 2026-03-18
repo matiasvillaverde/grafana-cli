@@ -82,15 +82,32 @@ pick_extracted_binary() {
   exit 1
 }
 
+path_contains_dir() {
+  dir="$1"
+  case ":${PATH:-}:" in
+    *:"${dir}":*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 pick_bindir() {
   if [ -n "${BINDIR:-}" ]; then
     printf '%s' "$BINDIR"
     return
   fi
-  if [ -w "/usr/local/bin" ]; then
-    printf '%s' "/usr/local/bin"
-    return
-  fi
+
+  for candidate in \
+    "/opt/homebrew/bin" \
+    "/usr/local/bin" \
+    "${HOME}/.local/bin" \
+    "${HOME}/bin"
+  do
+    if path_contains_dir "${candidate}" && [ -d "${candidate}" ] && [ -w "${candidate}" ]; then
+      printf '%s' "${candidate}"
+      return
+    fi
+  done
+
   printf '%s' "${HOME}/.local/bin"
 }
 
