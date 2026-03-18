@@ -65,6 +65,23 @@ verify_checksum() {
   fi
 }
 
+pick_extracted_binary() {
+  archive_name="$1"
+
+  for candidate in \
+    "${TMPDIR}/grafana" \
+    "${TMPDIR}/grafana_${VERSION}_${OS}_${ARCH}"
+  do
+    if [ -f "$candidate" ]; then
+      printf '%s' "$candidate"
+      return
+    fi
+  done
+
+  echo "failed to locate grafana binary in ${archive_name}" >&2
+  exit 1
+}
+
 pick_bindir() {
   if [ -n "${BINDIR:-}" ]; then
     printf '%s' "$BINDIR"
@@ -91,14 +108,11 @@ curl -fsSL "${BASE_URL}/${ARCHIVE}" -o "${TMPDIR}/${ARCHIVE}"
 curl -fsSL "${BASE_URL}/checksums.txt" -o "${TMPDIR}/checksums.txt"
 verify_checksum "${TMPDIR}/${ARCHIVE}" "${TMPDIR}/checksums.txt"
 tar -xzf "${TMPDIR}/${ARCHIVE}" -C "${TMPDIR}"
-if [ ! -f "${TMPDIR}/grafana" ]; then
-  echo "failed to locate grafana binary in ${ARCHIVE}" >&2
-  exit 1
-fi
+EXTRACTED_BINARY="$(pick_extracted_binary "${ARCHIVE}")"
 
 BINDIR="$(pick_bindir)"
 mkdir -p "$BINDIR"
-install -m 0755 "${TMPDIR}/grafana" "${BINDIR}/grafana"
+install -m 0755 "${EXTRACTED_BINARY}" "${BINDIR}/grafana"
 
 echo "Installed grafana ${VERSION} to ${BINDIR}/grafana"
 case ":$PATH:" in

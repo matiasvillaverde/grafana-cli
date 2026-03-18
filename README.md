@@ -94,7 +94,7 @@ curl -fsSL https://raw.githubusercontent.com/matiasvillaverde/grafana-cli/main/s
   BINDIR="$HOME/.local/bin" GRAFANA_INSTALL_VERSION=<release-tag> sh
 ```
 
-The shell installer targets the current release archive layout. If you need an older tag that predates this installer contract, download that archive from GitHub Releases directly.
+The shell installer works with the current GitHub release archives on macOS and Linux.
 
 ### GitHub Releases
 
