@@ -24,6 +24,26 @@ stdout '"name":"grafana-cli-integration"'
 exec grafana cloud stacks list
 stdout '"slug":"local-stack"'
 
+exec grafana cloud stacks inspect --stack local-stack
+stdout '"prometheus_url":"https://prometheus.local-stack.grafana.net"'
+stdout '"oncall_url":"https://oncall.local-stack.grafana.net"'
+
+exec grafana cloud stacks inspect --stack https://local-stack.grafana.net
+stdout '"base_url":"https://local-stack.grafana.net"'
+
+exec grafana cloud stacks plugins list --stack local-stack
+stdout '"id":"grafana-oncall-app"'
+
+exec grafana cloud stacks plugins list --stack local-stack.grafana.net --query oncall --limit 1
+stdout '"id":"grafana-oncall-app"'
+
+exec grafana cloud stacks plugins get --stack local-stack --plugin grafana-oncall-app
+stdout '"version":"1.0.0"'
+
+exec grafana cloud billed-usage get --org-slug local-org --year 2024 --month 9
+stdout '"dimensionName":"Logs"'
+stdout '"total_amount_due":878.91'
+
 exec grafana cloud access-policies list --region us
 stdout '"name":"Local integration policy"'
 

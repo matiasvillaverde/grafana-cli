@@ -33,7 +33,25 @@
         "dashboards delete",
         "dashboards versions",
         "dashboards render",
-        "datasources list"
+        "datasources list",
+        "datasources get",
+        "datasources health",
+        "datasources resources get",
+        "datasources resources post",
+        "datasources query",
+        "datasources azure-monitor query",
+        "datasources clickhouse query",
+        "datasources cloudwatch query",
+        "datasources elasticsearch query",
+        "datasources graphite query",
+        "datasources influxdb query",
+        "datasources loki query",
+        "datasources mssql query",
+        "datasources mysql query",
+        "datasources opensearch query",
+        "datasources postgres query",
+        "datasources prometheus query",
+        "datasources tempo query"
       ]
     },
     {
@@ -77,6 +95,10 @@
       "test": "TestAssistantAccessCloud",
       "commands": [
         "cloud stacks list",
+        "cloud stacks inspect",
+        "cloud stacks plugins list",
+        "cloud stacks plugins get",
+        "cloud billed-usage get",
         "cloud access-policies list",
         "cloud access-policies get",
         "service-accounts list",

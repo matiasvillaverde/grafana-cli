@@ -2,6 +2,8 @@
 
 This suite runs the CLI against a local Grafana stack started with Docker Compose plus deterministic stub servers for APIs that are not available in the local stack.
 
+Most command coverage already runs against a real Grafana instance: auth, dashboards, datasources, folders, annotations, alerting, and runtime observability hit the local stack directly. Stubs are reserved for Grafana Cloud, OnCall, Synthetic Monitoring, Assistant, SLO, and IRM surfaces that are not shipped by the Compose stack.
+
 ## Stack
 
 - Grafana `11.6.13`
