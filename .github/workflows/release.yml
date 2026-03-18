@@ -123,17 +123,31 @@ jobs:
               ext=".exe"
             fi
 
-            bin="grafana_${version}_${goos}_${goarch}${ext}"
-            CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" go build -trimpath -o "dist/${bin}" ./cmd/grafana
+            stage_dir="dist/${goos}_${goarch}"
+            mkdir -p "${stage_dir}"
+            bin="grafana${ext}"
+            archive="grafana_${version}_${goos}_${goarch}"
+            CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" go build -trimpath -o "${stage_dir}/${bin}" ./cmd/grafana
 
             if [ "${goos}" = "windows" ]; then
-              (cd dist && zip -9 "grafana_${version}_${goos}_${goarch}.zip" "${bin}")
+              (cd "${stage_dir}" && zip -9 "../${archive}.zip" "${bin}")
             else
-              tar -C dist -czf "dist/grafana_${version}_${goos}_${goarch}.tar.gz" "${bin}"
+              tar -C "${stage_dir}" -czf "dist/${archive}.tar.gz" "${bin}"
             fi
+
+            rm -rf "${stage_dir}"
           done
 
           (cd dist && sha256sum *.tar.gz *.zip > checksums.txt)
+
+      - name: Generate Homebrew formula
+        if: steps.version.outputs.create_release == 'true'
+        run: |
+          set -euo pipefail
+          go run ./cmd/release-assets homebrew \
+            --repo "${{ github.repository }}" \
+            --tag "${{ steps.version.outputs.version }}" \
+            --checksums dist/checksums.txt > dist/grafana-cli.rb
 
       - name: Publish GitHub Release
         if: steps.version.outputs.create_release == 'true'
@@ -146,3 +160,4 @@ jobs:
             dist/*.tar.gz
             dist/*.zip
             dist/checksums.txt
+            dist/grafana-cli.rb
