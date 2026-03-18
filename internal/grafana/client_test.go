@@ -109,6 +109,11 @@ func TestClientDomainMethods(t *testing.T) {
 				t.Fatalf("missing billed usage query params: %s", r.URL.RawQuery)
 			}
 		}
+		if r.URL.Path == "/api/instances/local-stack/plugins" && r.URL.Query().Get("pageCursor") == "cursor-1" {
+			if r.URL.Query().Get("pageSize") != "50" {
+				t.Fatalf("missing plugin page size query params: %s", r.URL.RawQuery)
+			}
+		}
 		if r.URL.Path == "/api/search" {
 			if r.URL.Query().Get("q") == "" && r.URL.Query().Get("type") != "dash-db" {
 				t.Fatalf("missing type query")
@@ -142,6 +147,9 @@ func TestClientDomainMethods(t *testing.T) {
 	}
 	if _, err := client.CloudStackPlugins(context.Background(), "local-stack"); err != nil {
 		t.Fatalf("cloud stack plugins failed: %v", err)
+	}
+	if _, err := client.CloudStackPluginsPage(context.Background(), CloudStackPluginListRequest{Stack: "local-stack", PageSize: 50, PageCursor: "cursor-1"}); err != nil {
+		t.Fatalf("cloud stack plugins page failed: %v", err)
 	}
 	if _, err := client.CloudStackPlugin(context.Background(), "local-stack", "grafana-oncall-app"); err != nil {
 		t.Fatalf("cloud stack plugin failed: %v", err)
@@ -195,7 +203,7 @@ func TestClientDomainMethods(t *testing.T) {
 		t.Fatalf("synthetic check failed: %v", err)
 	}
 
-	if hits["/api/v1/stacks"] != 1 || hits["/api/instances/local-stack/datasources"] != 1 || hits["/api/instances/local-stack/connections"] != 1 || hits["/api/instances/local-stack/plugins"] != 1 || hits["/api/instances/local-stack/plugins/grafana-oncall-app"] != 1 || hits["/api/orgs/local-org/billed-usage"] != 1 || hits["/api/v1/accesspolicies"] != 1 || hits["/api/v1/accesspolicies/ap-1"] != 1 || hits["/api/search"] != 2 || hits["/api/dashboards/db"] != 1 || hits["/api/datasources"] != 1 {
+	if hits["/api/v1/stacks"] != 1 || hits["/api/instances/local-stack/datasources"] != 1 || hits["/api/instances/local-stack/connections"] != 1 || hits["/api/instances/local-stack/plugins"] != 2 || hits["/api/instances/local-stack/plugins/grafana-oncall-app"] != 1 || hits["/api/orgs/local-org/billed-usage"] != 1 || hits["/api/v1/accesspolicies"] != 1 || hits["/api/v1/accesspolicies/ap-1"] != 1 || hits["/api/search"] != 2 || hits["/api/dashboards/db"] != 1 || hits["/api/datasources"] != 1 {
 		t.Fatalf("unexpected hit counts: %+v", hits)
 	}
 	if hits["/api/serviceaccounts/search"] != 1 || hits["/api/serviceaccounts/1"] != 1 {
@@ -259,6 +267,9 @@ func TestClientMissingBaseURLPaths(t *testing.T) {
 	}
 	if _, err := client.CloudStackPlugins(context.Background(), "local-stack"); !errors.Is(err, ErrMissingBaseURL) {
 		t.Fatalf("expected ErrMissingBaseURL for cloud stack plugins, got %v", err)
+	}
+	if _, err := client.CloudStackPluginsPage(context.Background(), CloudStackPluginListRequest{Stack: "local-stack", PageSize: 50, PageCursor: "cursor-1"}); !errors.Is(err, ErrMissingBaseURL) {
+		t.Fatalf("expected ErrMissingBaseURL for cloud stack plugin page, got %v", err)
 	}
 	if _, err := client.CloudStackPlugin(context.Background(), "local-stack", "grafana-oncall-app"); !errors.Is(err, ErrMissingBaseURL) {
 		t.Fatalf("expected ErrMissingBaseURL for cloud stack plugin, got %v", err)
@@ -347,6 +358,9 @@ func TestCloudStackMethodsInvalidCloudURL(t *testing.T) {
 	}
 	if _, err := client.CloudStackPlugins(context.Background(), "local-stack"); err == nil {
 		t.Fatalf("expected invalid cloud url error for stack plugins")
+	}
+	if _, err := client.CloudStackPluginsPage(context.Background(), CloudStackPluginListRequest{Stack: "local-stack", PageSize: 50, PageCursor: "cursor-1"}); err == nil {
+		t.Fatalf("expected invalid cloud url error for stack plugin page")
 	}
 	if _, err := client.CloudStackPlugin(context.Background(), "local-stack", "grafana-oncall-app"); err == nil {
 		t.Fatalf("expected invalid cloud url error for stack plugin")

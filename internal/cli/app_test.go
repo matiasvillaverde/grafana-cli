@@ -204,6 +204,8 @@ type fakeClient struct {
 	cloudStackConnErr    error
 	cloudStackPlugins    any
 	cloudStackPluginsErr error
+	cloudStackPluginReq  grafana.CloudStackPluginListRequest
+	cloudStackPluginPage map[string]any
 	cloudStackPluginID   string
 	cloudStackPlugin     any
 	cloudStackPluginErr  error
@@ -336,7 +338,19 @@ func (f *fakeClient) CloudStackConnections(_ context.Context, stack string) (any
 }
 
 func (f *fakeClient) CloudStackPlugins(_ context.Context, stack string) (any, error) {
+	f.cloudStackPluginReq = grafana.CloudStackPluginListRequest{Stack: stack}
 	f.cloudStackSlug = stack
+	return f.cloudStackPlugins, f.cloudStackPluginsErr
+}
+
+func (f *fakeClient) CloudStackPluginsPage(_ context.Context, req grafana.CloudStackPluginListRequest) (any, error) {
+	f.cloudStackPluginReq = req
+	f.cloudStackSlug = req.Stack
+	if f.cloudStackPluginPage != nil {
+		if result, ok := f.cloudStackPluginPage[req.PageCursor]; ok {
+			return result, f.cloudStackPluginsErr
+		}
+	}
 	return f.cloudStackPlugins, f.cloudStackPluginsErr
 }
 
@@ -909,10 +923,21 @@ func TestAPICloudDashboardDatasourceCommands(t *testing.T) {
 				"tenants": []any{map[string]any{"type": "prometheus"}},
 			},
 		},
-		cloudStackPlugins: map[string]any{"items": []any{
-			map[string]any{"id": "grafana-oncall-app", "name": "Grafana OnCall", "version": "1.0.0"},
-			map[string]any{"id": "grafana-incident-app", "name": "Grafana IRM", "version": "1.1.0"},
-		}},
+		cloudStackPluginPage: map[string]any{
+			"": map[string]any{
+				"items": []any{
+					map[string]any{"id": "grafana-oncall-app", "name": "Grafana OnCall", "version": "1.0.0"},
+				},
+				"metadata": map[string]any{
+					"pagination": map[string]any{"nextPage": "/api/instances/local-stack/plugins?pageCursor=cursor-2"},
+				},
+			},
+			"cursor-2": map[string]any{
+				"items": []any{
+					map[string]any{"id": "grafana-incident-app", "name": "Grafana IRM", "version": "1.1.0"},
+				},
+			},
+		},
 		cloudStackPlugin: map[string]any{"id": "grafana-oncall-app", "name": "Grafana OnCall", "version": "1.0.0"},
 		cloudBillingResp: map[string]any{"items": []any{
 			map[string]any{
@@ -1016,6 +1041,17 @@ func TestAPICloudDashboardDatasourceCommands(t *testing.T) {
 		t.Fatalf("unexpected cloud stack plugins list payload: %+v", plugins)
 	}
 	out.Reset()
+	if code := app.Run(context.Background(), []string{"cloud", "stacks", "plugins", "list", "--stack", "local-stack", "--limit", "2"}); code != 0 {
+		t.Fatalf("cloud stack plugins paginated list should succeed: %s", errOut.String())
+	}
+	plugins = decodeJSON(t, out.String())
+	if len(plugins["items"].([]any)) != 2 || plugins["items"].([]any)[1].(map[string]any)["id"] != "grafana-incident-app" {
+		t.Fatalf("unexpected paginated cloud stack plugins payload: %+v", plugins)
+	}
+	if client.cloudStackPluginReq.PageCursor != "cursor-2" {
+		t.Fatalf("expected second plugin page cursor to be used, got %+v", client.cloudStackPluginReq)
+	}
+	out.Reset()
 	if code := app.Run(context.Background(), []string{"cloud", "stacks", "plugins", "get", "--stack", "local-stack", "--plugin", "grafana-oncall-app"}); code != 0 {
 		t.Fatalf("cloud stack plugin get should succeed: %s", errOut.String())
 	}
@@ -1048,6 +1084,9 @@ func TestAPICloudDashboardDatasourceCommands(t *testing.T) {
 	}
 	if code := app.Run(context.Background(), []string{"cloud", "stacks", "plugins", "get", "--stack", "local-stack"}); code != 1 {
 		t.Fatalf("cloud stack plugin get missing plugin should fail")
+	}
+	if code := app.Run(context.Background(), []string{"cloud", "stacks", "plugins", "get", "--plugin", "grafana-oncall-app"}); code != 1 {
+		t.Fatalf("cloud stack plugin get missing stack should fail")
 	}
 	if code := app.Run(context.Background(), []string{"cloud", "stacks", "plugins", "get", "--stack", "https://example.com", "--plugin", "grafana-oncall-app"}); code != 1 {
 		t.Fatalf("cloud stack plugin get invalid stack should fail")
@@ -1213,6 +1252,9 @@ func TestCloudStacksInspectWarningsAndHelp(t *testing.T) {
 	}
 	if code := app.Run(context.Background(), []string{"cloud", "stacks", "inspect", "--bad"}); code != 1 {
 		t.Fatalf("cloud inspect parse error should fail")
+	}
+	if code := app.Run(context.Background(), []string{"cloud", "stacks", "inspect", "--stack", "local-stack"}); code != 1 {
+		t.Fatalf("cloud inspect should fail outside agent mode when discovery is incomplete")
 	}
 
 	out.Reset()
@@ -3538,6 +3580,33 @@ func TestAuthInferenceHelpers(t *testing.T) {
 	if parsedTarget.Slug != "prod-observability" || parsedTarget.BaseURL != "https://prod-observability.grafana.net" {
 		t.Fatalf("unexpected parsed cloud stack target: %+v", parsedTarget)
 	}
+	if size := cloudStackPluginPageSize(0, 0); size != 100 {
+		t.Fatalf("unexpected default cloud stack plugin page size: %d", size)
+	}
+	if size := cloudStackPluginPageSize(1, 1); size != 1 {
+		t.Fatalf("unexpected exhausted cloud stack plugin page size: %d", size)
+	}
+	if size := cloudStackPluginPageSize(250, 100); size != 100 {
+		t.Fatalf("unexpected capped cloud stack plugin page size: %d", size)
+	}
+	if cursor := cloudNextPageCursor("scalar"); cursor != "" {
+		t.Fatalf("expected empty cloud next page cursor for scalar payload, got %q", cursor)
+	}
+	if cursor := cloudNextPageCursor(map[string]any{"next": "/api/instances/local-stack/plugins?pageCursor=cursor-1"}); cursor != "cursor-1" {
+		t.Fatalf("unexpected cloud next page cursor from root next: %q", cursor)
+	}
+	if cursor := cloudNextPageCursor(map[string]any{"metadata": map[string]any{"pagination": map[string]any{"nextPage": "/api/instances/local-stack/plugins?cursor=cursor-2"}}}); cursor != "cursor-2" {
+		t.Fatalf("unexpected cloud next page cursor from nested nextPage: %q", cursor)
+	}
+	if cursor := cloudNextPageCursor(map[string]any{"items": []any{}}); cursor != "" {
+		t.Fatalf("expected empty cloud next page cursor without pagination, got %q", cursor)
+	}
+	if cursor := cloudPageCursorValue("cursor-raw"); cursor != "cursor-raw" {
+		t.Fatalf("unexpected raw cloud page cursor value: %q", cursor)
+	}
+	if cursor := cloudPageCursorValue("://bad"); cursor != "://bad" {
+		t.Fatalf("unexpected invalid-url cloud page cursor value: %q", cursor)
+	}
 
 	endpoints := inferDatasourceEndpoints([]any{
 		map[string]any{"type": "prometheus", "url": "https://prom"},
@@ -3683,6 +3752,53 @@ func TestAuthInferenceHelpers(t *testing.T) {
 	warnings := app.applyInferredStackEndpoints(context.Background(), cfg, "prod-observability", "")
 	if len(warnings) != 1 || cfg.PrometheusURL != "https://prom" {
 		t.Fatalf("unexpected inferred stack endpoint warnings or config: warnings=%+v cfg=%+v", warnings, cfg)
+	}
+
+	paginatedClient := &fakeClient{
+		cloudStackPluginPage: map[string]any{
+			"": map[string]any{
+				"items": []any{
+					"bad",
+					map[string]any{"id": "grafana-oncall-app", "name": "Grafana OnCall"},
+					map[string]any{"id": "grafana-incident-app", "name": "Grafana IRM"},
+				},
+			},
+		},
+	}
+	paginatedPayload, count, truncated, err := app.listCloudStackPlugins(context.Background(), paginatedClient, "prod-observability", "", 1)
+	if err != nil || count != 1 || truncated != true || len(paginatedPayload.(map[string]any)["items"].([]any)) != 1 {
+		t.Fatalf("unexpected paginated plugin list result: payload=%+v count=%d truncated=%v err=%v", paginatedPayload, count, truncated, err)
+	}
+
+	nextPageClient := &fakeClient{
+		cloudStackPluginPage: map[string]any{
+			"": map[string]any{
+				"items": []any{
+					map[string]any{"id": "grafana-oncall-app", "name": "Grafana OnCall"},
+				},
+				"metadata": map[string]any{"pagination": map[string]any{"nextPage": "/api/instances/prod-observability/plugins?pageCursor=cursor-2"}},
+			},
+		},
+	}
+	_, count, truncated, err = app.listCloudStackPlugins(context.Background(), nextPageClient, "prod-observability", "", 1)
+	if err != nil || count != 1 || truncated != true {
+		t.Fatalf("unexpected next-page plugin list result: count=%d truncated=%v err=%v", count, truncated, err)
+	}
+
+	scalarClient := &fakeClient{
+		cloudStackPlugins: map[string]any{
+			"id":       "grafana-oncall-app",
+			"metadata": map[string]any{"pagination": map[string]any{"nextPage": "/api/instances/prod-observability/plugins?pageCursor=cursor-3"}},
+		},
+	}
+	scalarPayload, count, truncated, err := app.listCloudStackPlugins(context.Background(), scalarClient, "prod-observability", "", 1)
+	if err != nil || count != 0 || truncated != true || scalarPayload.(map[string]any)["id"] != "grafana-oncall-app" {
+		t.Fatalf("unexpected scalar plugin list result: payload=%+v count=%d truncated=%v err=%v", scalarPayload, count, truncated, err)
+	}
+
+	errorClient := &fakeClient{cloudStackPluginsErr: errors.New("plugins failed")}
+	if _, _, _, err := app.listCloudStackPlugins(context.Background(), errorClient, "prod-observability", "", 1); err == nil {
+		t.Fatalf("expected plugin list page error")
 	}
 }
 

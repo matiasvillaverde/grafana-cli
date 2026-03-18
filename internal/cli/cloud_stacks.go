@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/matiasvillaverde/grafana-cli/internal/config"
+	"github.com/matiasvillaverde/grafana-cli/internal/grafana"
 )
 
 func (a *App) runCloudStacks(ctx context.Context, opts globalOptions, args []string) error {
@@ -79,6 +80,9 @@ func (a *App) runCloudStacksInspect(ctx context.Context, opts globalOptions, cli
 	if connectionErr != nil {
 		warnings = append(warnings, "cloud stack connection discovery failed: "+connectionErr.Error())
 	}
+	if len(warnings) > 0 && !opts.Agent {
+		return fmt.Errorf("cloud stacks inspect incomplete: %s", strings.Join(warnings, "; "))
+	}
 	if len(warnings) > 0 {
 		meta.Warnings = warnings
 	}
@@ -114,18 +118,17 @@ func (a *App) runCloudStackPluginsList(ctx context.Context, opts globalOptions, 
 	if err != nil {
 		return err
 	}
-	result, err := client.CloudStackPlugins(ctx, stackTarget.Slug)
+	result, count, truncated, err := a.listCloudStackPlugins(ctx, client, stackTarget.Slug, strings.TrimSpace(*query), *limit)
 	if err != nil {
 		return err
 	}
-	filtered, count, truncated := filterNamedPayload(result, strings.TrimSpace(*query), *limit, "id", "name", "slug", "version")
 	meta := &responseMetadata{Command: "cloud stacks plugins list"}
 	meta.Count = &count
-	if truncated || payloadHasNextPage(result) {
+	if truncated {
 		meta.Truncated = true
-		meta.NextAction = "Refine --query or raise --limit to inspect more stack plugins"
+		meta.NextAction = "Raise --limit or refine --query to inspect more stack plugins"
 	}
-	return a.emitWithMetadata(opts, filtered, meta)
+	return a.emitWithMetadata(opts, result, meta)
 }
 
 func (a *App) runCloudStackPluginsGet(ctx context.Context, opts globalOptions, client APIClient, args []string) error {
@@ -146,6 +149,92 @@ func (a *App) runCloudStackPluginsGet(ctx context.Context, opts globalOptions, c
 		return err
 	}
 	return a.emit(opts, result)
+}
+
+func (a *App) listCloudStackPlugins(ctx context.Context, client APIClient, stackSlug, query string, limit int) (any, int, bool, error) {
+	collected := make([]any, 0, limit)
+	pageCursor := ""
+
+	for {
+		page, err := client.CloudStackPluginsPage(ctx, grafana.CloudStackPluginListRequest{
+			Stack:      stackSlug,
+			PageSize:   cloudStackPluginPageSize(limit, len(collected)),
+			PageCursor: pageCursor,
+		})
+		if err != nil {
+			return nil, 0, false, err
+		}
+
+		items, _, ok := collectionPayload(page)
+		if !ok {
+			filtered, count, pageTruncated := filterNamedPayload(page, query, limit, "id", "name", "slug", "version")
+			return filtered, count, pageTruncated || payloadHasNextPage(page), nil
+		}
+
+		pageCursor = cloudNextPageCursor(page)
+		for _, item := range items {
+			record, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			if query != "" && !matchesAnyField(record, query, "id", "name", "slug", "version") {
+				continue
+			}
+			if limit > 0 && len(collected) >= limit {
+				return map[string]any{"items": collected}, len(collected), true, nil
+			}
+			collected = append(collected, record)
+		}
+		if limit > 0 && len(collected) >= limit && pageCursor != "" {
+			return map[string]any{"items": collected}, len(collected), true, nil
+		}
+		if pageCursor == "" {
+			return map[string]any{"items": collected}, len(collected), false, nil
+		}
+	}
+}
+
+func cloudStackPluginPageSize(limit, count int) int {
+	const defaultPageSize = 100
+	if limit <= 0 {
+		return defaultPageSize
+	}
+	remaining := limit - count
+	if remaining <= 0 {
+		return 1
+	}
+	if remaining < defaultPageSize {
+		return remaining
+	}
+	return defaultPageSize
+}
+
+func cloudNextPageCursor(payload any) string {
+	root, ok := payload.(map[string]any)
+	if !ok {
+		return ""
+	}
+	nextValue := strings.TrimSpace(firstNonEmptyString(root, "next", "nextPage"))
+	if nextValue == "" {
+		nextValue = strings.TrimSpace(firstNonEmptyString(mapValue(mapValue(root, "metadata"), "pagination"), "next", "nextPage"))
+	}
+	if nextValue == "" {
+		return ""
+	}
+	return cloudPageCursorValue(nextValue)
+}
+
+func cloudPageCursorValue(nextValue string) string {
+	parsed, err := url.Parse(nextValue)
+	if err == nil {
+		if cursor := strings.TrimSpace(parsed.Query().Get("pageCursor")); cursor != "" {
+			return cursor
+		}
+		if cursor := strings.TrimSpace(parsed.Query().Get("cursor")); cursor != "" {
+			return cursor
+		}
+	}
+	return nextValue
 }
 
 func (a *App) applyInferredStackEndpoints(ctx context.Context, cfg *config.Config, stackSlug, cloudToken string) []string {

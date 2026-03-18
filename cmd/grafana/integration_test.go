@@ -366,6 +366,18 @@ func newCloudProxy() *httptest.Server {
 				},
 			})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/instances/local-stack/plugins":
+			if r.URL.Query().Get("pageCursor") == "cursor-2" {
+				writeJSON(w, http.StatusOK, map[string]any{
+					"items": []map[string]any{
+						{
+							"id":      "grafana-incident-app",
+							"name":    "Grafana IRM",
+							"version": "1.1.0",
+						},
+					},
+				})
+				return
+			}
 			writeJSON(w, http.StatusOK, map[string]any{
 				"items": []map[string]any{
 					{
@@ -373,11 +385,9 @@ func newCloudProxy() *httptest.Server {
 						"name":    "Grafana OnCall",
 						"version": "1.0.0",
 					},
-					{
-						"id":      "grafana-incident-app",
-						"name":    "Grafana IRM",
-						"version": "1.1.0",
-					},
+				},
+				"metadata": map[string]any{
+					"pagination": map[string]any{"nextPage": "/api/instances/local-stack/plugins?pageCursor=cursor-2"},
 				},
 			})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/instances/local-stack/plugins/grafana-oncall-app":

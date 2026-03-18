@@ -30,6 +30,7 @@ type APIClient interface {
 	CloudStackDatasources(ctx context.Context, stack string) (any, error)
 	CloudStackConnections(ctx context.Context, stack string) (any, error)
 	CloudStackPlugins(ctx context.Context, stack string) (any, error)
+	CloudStackPluginsPage(ctx context.Context, req grafana.CloudStackPluginListRequest) (any, error)
 	CloudStackPlugin(ctx context.Context, stack, plugin string) (any, error)
 	CloudBilledUsage(ctx context.Context, req grafana.CloudBilledUsageRequest) (any, error)
 	CloudAccessPolicies(ctx context.Context, req grafana.CloudAccessPolicyListRequest) (any, error)

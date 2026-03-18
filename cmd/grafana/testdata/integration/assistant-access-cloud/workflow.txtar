@@ -34,6 +34,9 @@ stdout '"base_url":"https://local-stack.grafana.net"'
 exec grafana cloud stacks plugins list --stack local-stack
 stdout '"id":"grafana-oncall-app"'
 
+exec grafana cloud stacks plugins list --stack local-stack --limit 2
+stdout '"id":"grafana-incident-app"'
+
 exec grafana cloud stacks plugins list --stack local-stack.grafana.net --query oncall --limit 1
 stdout '"id":"grafana-oncall-app"'
 
