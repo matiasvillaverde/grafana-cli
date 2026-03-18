@@ -325,7 +325,114 @@ func newCloudProxy() *httptest.Server {
 					},
 				},
 			})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/instances/local-stack/datasources":
+			writeJSON(w, http.StatusOK, map[string]any{
+				"items": []map[string]any{
+					{
+						"uid":  "prometheus-local",
+						"name": "metrics",
+						"type": "prometheus",
+						"url":  "https://prometheus.local-stack.grafana.net",
+					},
+					{
+						"uid":  "loki-local",
+						"name": "logs",
+						"type": "loki",
+						"url":  "https://logs.local-stack.grafana.net",
+					},
+					{
+						"uid":  "tempo-local",
+						"name": "traces",
+						"type": "tempo",
+						"url":  "https://tempo.local-stack.grafana.net",
+					},
+				},
+			})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/instances/local-stack/connections":
+			writeJSON(w, http.StatusOK, map[string]any{
+				"connections": []map[string]any{
+					{
+						"type": "oncall",
+						"details": map[string]any{
+							"oncallApiUrl": "https://oncall.local-stack.grafana.net",
+						},
+					},
+				},
+				"privateConnectivityInfo": map[string]any{
+					"tenants": []map[string]any{
+						{"type": "prometheus"},
+						{"type": "logs"},
+					},
+				},
+			})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/instances/local-stack/plugins":
+			if r.URL.Query().Get("pageCursor") == "cursor-2" {
+				writeJSON(w, http.StatusOK, map[string]any{
+					"items": []map[string]any{
+						{
+							"id":      "grafana-incident-app",
+							"name":    "Grafana IRM",
+							"version": "1.1.0",
+						},
+					},
+				})
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{
+				"items": []map[string]any{
+					{
+						"id":      "grafana-oncall-app",
+						"name":    "Grafana OnCall",
+						"version": "1.0.0",
+					},
+				},
+				"metadata": map[string]any{
+					"pagination": map[string]any{"nextPage": "/api/instances/local-stack/plugins?pageCursor=cursor-2"},
+				},
+			})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/instances/local-stack/plugins/grafana-oncall-app":
+			writeJSON(w, http.StatusOK, map[string]any{
+				"id":      "grafana-oncall-app",
+				"name":    "Grafana OnCall",
+				"version": "1.0.0",
+			})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/orgs/local-org/billed-usage":
+			writeJSON(w, http.StatusOK, map[string]any{
+				"items": []map[string]any{
+					{
+						"dimensionName": "Logs",
+						"amountDue":     100.5,
+						"periodStart":   "2024-09-01T00:00:00Z",
+						"periodEnd":     "2024-09-30T23:59:59Z",
+						"usages": []map[string]any{
+							{"stackName": "local-stack.grafana.net"},
+						},
+					},
+					{
+						"dimensionName": "Metrics",
+						"amountDue":     778.41,
+						"periodStart":   "2024-09-01T00:00:00Z",
+						"periodEnd":     "2024-09-30T23:59:59Z",
+						"usages": []map[string]any{
+							{"stackName": "local-stack.grafana.net"},
+						},
+					},
+				},
+			})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/accesspolicies":
+			if r.URL.Query().Get("pageCursor") == "cursor-2" {
+				writeJSON(w, http.StatusOK, map[string]any{
+					"items": []map[string]any{
+						{
+							"id":     "policy-2",
+							"name":   "Local integration writer policy",
+							"status": "active",
+							"region": "us",
+						},
+					},
+				})
+				return
+			}
 			writeJSON(w, http.StatusOK, map[string]any{
 				"items": []map[string]any{
 					{
@@ -334,6 +441,9 @@ func newCloudProxy() *httptest.Server {
 						"status": "active",
 						"region": "us",
 					},
+				},
+				"metadata": map[string]any{
+					"pagination": map[string]any{"nextPage": "/api/v1/accesspolicies?pageCursor=cursor-2"},
 				},
 			})
 		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/v1/accesspolicies/"):

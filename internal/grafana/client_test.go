@@ -104,6 +104,16 @@ func TestClientDomainMethods(t *testing.T) {
 		if r.URL.Path == "/api/v1/accesspolicies" && r.URL.Query().Get("region") != "us" {
 			t.Fatalf("missing access policy region query: %s", r.URL.RawQuery)
 		}
+		if r.URL.Path == "/api/orgs/local-org/billed-usage" {
+			if r.URL.Query().Get("year") != "2024" || r.URL.Query().Get("month") != "9" {
+				t.Fatalf("missing billed usage query params: %s", r.URL.RawQuery)
+			}
+		}
+		if r.URL.Path == "/api/instances/local-stack/plugins" && r.URL.Query().Get("pageCursor") == "cursor-1" {
+			if r.URL.Query().Get("pageSize") != "50" {
+				t.Fatalf("missing plugin page size query params: %s", r.URL.RawQuery)
+			}
+		}
 		if r.URL.Path == "/api/search" {
 			if r.URL.Query().Get("q") == "" && r.URL.Query().Get("type") != "dash-db" {
 				t.Fatalf("missing type query")
@@ -128,6 +138,24 @@ func TestClientDomainMethods(t *testing.T) {
 
 	if _, err := client.CloudStacks(context.Background()); err != nil {
 		t.Fatalf("cloud stacks failed: %v", err)
+	}
+	if _, err := client.CloudStackDatasources(context.Background(), "local-stack"); err != nil {
+		t.Fatalf("cloud stack datasources failed: %v", err)
+	}
+	if _, err := client.CloudStackConnections(context.Background(), "local-stack"); err != nil {
+		t.Fatalf("cloud stack connections failed: %v", err)
+	}
+	if _, err := client.CloudStackPlugins(context.Background(), "local-stack"); err != nil {
+		t.Fatalf("cloud stack plugins failed: %v", err)
+	}
+	if _, err := client.CloudStackPluginsPage(context.Background(), CloudStackPluginListRequest{Stack: "local-stack", PageSize: 50, PageCursor: "cursor-1"}); err != nil {
+		t.Fatalf("cloud stack plugins page failed: %v", err)
+	}
+	if _, err := client.CloudStackPlugin(context.Background(), "local-stack", "grafana-oncall-app"); err != nil {
+		t.Fatalf("cloud stack plugin failed: %v", err)
+	}
+	if _, err := client.CloudBilledUsage(context.Background(), CloudBilledUsageRequest{OrgSlug: "local-org", Year: 2024, Month: 9}); err != nil {
+		t.Fatalf("cloud billed usage failed: %v", err)
 	}
 	if _, err := client.CloudAccessPolicies(context.Background(), CloudAccessPolicyListRequest{Region: "us", PageSize: 10}); err != nil {
 		t.Fatalf("cloud access policies failed: %v", err)
@@ -175,7 +203,7 @@ func TestClientDomainMethods(t *testing.T) {
 		t.Fatalf("synthetic check failed: %v", err)
 	}
 
-	if hits["/api/v1/stacks"] != 1 || hits["/api/v1/accesspolicies"] != 1 || hits["/api/v1/accesspolicies/ap-1"] != 1 || hits["/api/search"] != 2 || hits["/api/dashboards/db"] != 1 || hits["/api/datasources"] != 1 {
+	if hits["/api/v1/stacks"] != 1 || hits["/api/instances/local-stack/datasources"] != 1 || hits["/api/instances/local-stack/connections"] != 1 || hits["/api/instances/local-stack/plugins"] != 2 || hits["/api/instances/local-stack/plugins/grafana-oncall-app"] != 1 || hits["/api/orgs/local-org/billed-usage"] != 1 || hits["/api/v1/accesspolicies"] != 1 || hits["/api/v1/accesspolicies/ap-1"] != 1 || hits["/api/search"] != 2 || hits["/api/dashboards/db"] != 1 || hits["/api/datasources"] != 1 {
 		t.Fatalf("unexpected hit counts: %+v", hits)
 	}
 	if hits["/api/serviceaccounts/search"] != 1 || hits["/api/serviceaccounts/1"] != 1 {
@@ -230,6 +258,24 @@ func TestClientMissingBaseURLPaths(t *testing.T) {
 	}
 	if _, err := client.CloudStacks(context.Background()); !errors.Is(err, ErrMissingBaseURL) {
 		t.Fatalf("expected ErrMissingBaseURL for cloud stacks, got %v", err)
+	}
+	if _, err := client.CloudStackDatasources(context.Background(), "local-stack"); !errors.Is(err, ErrMissingBaseURL) {
+		t.Fatalf("expected ErrMissingBaseURL for cloud stack datasources, got %v", err)
+	}
+	if _, err := client.CloudStackConnections(context.Background(), "local-stack"); !errors.Is(err, ErrMissingBaseURL) {
+		t.Fatalf("expected ErrMissingBaseURL for cloud stack connections, got %v", err)
+	}
+	if _, err := client.CloudStackPlugins(context.Background(), "local-stack"); !errors.Is(err, ErrMissingBaseURL) {
+		t.Fatalf("expected ErrMissingBaseURL for cloud stack plugins, got %v", err)
+	}
+	if _, err := client.CloudStackPluginsPage(context.Background(), CloudStackPluginListRequest{Stack: "local-stack", PageSize: 50, PageCursor: "cursor-1"}); !errors.Is(err, ErrMissingBaseURL) {
+		t.Fatalf("expected ErrMissingBaseURL for cloud stack plugin page, got %v", err)
+	}
+	if _, err := client.CloudStackPlugin(context.Background(), "local-stack", "grafana-oncall-app"); !errors.Is(err, ErrMissingBaseURL) {
+		t.Fatalf("expected ErrMissingBaseURL for cloud stack plugin, got %v", err)
+	}
+	if _, err := client.CloudBilledUsage(context.Background(), CloudBilledUsageRequest{OrgSlug: "local-org", Year: 2024, Month: 9}); !errors.Is(err, ErrMissingBaseURL) {
+		t.Fatalf("expected ErrMissingBaseURL for cloud billed usage, got %v", err)
 	}
 	if _, err := client.CloudAccessPolicies(context.Background(), CloudAccessPolicyListRequest{Region: "us"}); !errors.Is(err, ErrMissingBaseURL) {
 		t.Fatalf("expected ErrMissingBaseURL for cloud access policies, got %v", err)
@@ -296,6 +342,31 @@ func TestClientMissingBaseURLPaths(t *testing.T) {
 	}
 	if _, err := client.SyntheticCheck(context.Background(), SyntheticCheckGetRequest{ID: 1}); !errors.Is(err, ErrMissingBaseURL) {
 		t.Fatalf("expected ErrMissingBaseURL for synthetic check, got %v", err)
+	}
+}
+
+func TestCloudStackMethodsInvalidCloudURL(t *testing.T) {
+	client := NewClient(config.Config{CloudURL: "://bad"}, doerFunc(func(_ *http.Request) (*http.Response, error) {
+		return nil, errors.New("should not call")
+	}))
+
+	if _, err := client.CloudStackDatasources(context.Background(), "local-stack"); err == nil {
+		t.Fatalf("expected invalid cloud url error for stack datasources")
+	}
+	if _, err := client.CloudStackConnections(context.Background(), "local-stack"); err == nil {
+		t.Fatalf("expected invalid cloud url error for stack connections")
+	}
+	if _, err := client.CloudStackPlugins(context.Background(), "local-stack"); err == nil {
+		t.Fatalf("expected invalid cloud url error for stack plugins")
+	}
+	if _, err := client.CloudStackPluginsPage(context.Background(), CloudStackPluginListRequest{Stack: "local-stack", PageSize: 50, PageCursor: "cursor-1"}); err == nil {
+		t.Fatalf("expected invalid cloud url error for stack plugin page")
+	}
+	if _, err := client.CloudStackPlugin(context.Background(), "local-stack", "grafana-oncall-app"); err == nil {
+		t.Fatalf("expected invalid cloud url error for stack plugin")
+	}
+	if _, err := client.CloudBilledUsage(context.Background(), CloudBilledUsageRequest{OrgSlug: "local-org", Year: 2024, Month: 9}); err == nil {
+		t.Fatalf("expected invalid cloud url error for billed usage")
 	}
 }
 

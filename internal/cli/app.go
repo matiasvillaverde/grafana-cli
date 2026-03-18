@@ -27,6 +27,12 @@ import (
 type APIClient interface {
 	Raw(ctx context.Context, method, path string, body any) (any, error)
 	CloudStacks(ctx context.Context) (any, error)
+	CloudStackDatasources(ctx context.Context, stack string) (any, error)
+	CloudStackConnections(ctx context.Context, stack string) (any, error)
+	CloudStackPlugins(ctx context.Context, stack string) (any, error)
+	CloudStackPluginsPage(ctx context.Context, req grafana.CloudStackPluginListRequest) (any, error)
+	CloudStackPlugin(ctx context.Context, stack, plugin string) (any, error)
+	CloudBilledUsage(ctx context.Context, req grafana.CloudBilledUsageRequest) (any, error)
 	CloudAccessPolicies(ctx context.Context, req grafana.CloudAccessPolicyListRequest) (any, error)
 	CloudAccessPolicy(ctx context.Context, id, region string) (any, error)
 	SearchDashboards(ctx context.Context, query, tag string, limit int) (any, error)
@@ -444,18 +450,9 @@ func (a *App) runCloud(ctx context.Context, opts globalOptions, args []string) e
 	}
 	switch args[0] {
 	case "stacks":
-		if len(args) < 2 || args[1] != "list" {
-			return errors.New("usage: cloud stacks list")
-		}
-		cfg, err := a.requireAuthConfig()
-		if err != nil {
-			return err
-		}
-		result, err := a.NewClient(cfg).CloudStacks(ctx)
-		if err != nil {
-			return err
-		}
-		return a.emitWithMetadata(opts, result, collectionMetadata("cloud stacks list", result, 0, ""))
+		return a.runCloudStacks(ctx, opts, args[1:])
+	case "billed-usage":
+		return a.runCloudBilledUsage(ctx, opts, args[1:])
 	case "access-policies":
 		return a.runCloudAccessPolicies(ctx, opts, args[1:])
 	default:
@@ -1468,98 +1465,6 @@ func (a *App) resolveAuthEndpoints(ctx context.Context, cfg *config.Config, req 
 		cfg.OnCallURL = req.OnCallURL
 	}
 	return warnings, nil
-}
-
-func (a *App) applyInferredStackEndpoints(ctx context.Context, cfg *config.Config, stackSlug, cloudToken string) []string {
-	token := strings.TrimSpace(cloudToken)
-	if token == "" {
-		token = cfg.Token
-	}
-	cloudClient := a.NewClient(config.Config{
-		BaseURL:  cfg.CloudURL,
-		CloudURL: cfg.CloudURL,
-		Token:    token,
-	})
-	warnings := make([]string, 0, 2)
-
-	datasources, err := cloudClient.Raw(ctx, "GET", "/api/instances/"+url.PathEscape(stackSlug)+"/datasources", nil)
-	if err != nil {
-		warnings = append(warnings, fmt.Sprintf("stack datasource discovery failed: %v", err))
-	} else {
-		endpoints := inferDatasourceEndpoints(datasources)
-		if endpoints.PrometheusURL != "" {
-			cfg.PrometheusURL = endpoints.PrometheusURL
-		}
-		if endpoints.LogsURL != "" {
-			cfg.LogsURL = endpoints.LogsURL
-		}
-		if endpoints.TracesURL != "" {
-			cfg.TracesURL = endpoints.TracesURL
-		}
-	}
-
-	connections, err := cloudClient.Raw(ctx, "GET", "/api/instances/"+url.PathEscape(stackSlug)+"/connections", nil)
-	if err != nil {
-		warnings = append(warnings, fmt.Sprintf("stack connection discovery failed: %v", err))
-	} else if onCallURL := inferOnCallURL(connections); onCallURL != "" {
-		cfg.OnCallURL = onCallURL
-	}
-	return warnings
-}
-
-func normalizeStackIdentifier(value string) (string, string, error) {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
-		return "", "", errors.New("stack identifier is required")
-	}
-	if strings.Contains(trimmed, "://") {
-		parsed, err := url.Parse(trimmed)
-		if err != nil {
-			return "", "", fmt.Errorf("invalid --stack value: %w", err)
-		}
-		host := strings.ToLower(strings.TrimSpace(parsed.Hostname()))
-		if !strings.HasSuffix(host, ".grafana.net") {
-			return "", "", errors.New("--stack URL must target a *.grafana.net host")
-		}
-		slug := strings.TrimSuffix(host, ".grafana.net")
-		return slug, parsed.Scheme + "://" + parsed.Host, nil
-	}
-	host := strings.ToLower(trimmed)
-	if strings.Contains(host, ".") {
-		if !strings.HasSuffix(host, ".grafana.net") {
-			return "", "", errors.New("--stack must be a Grafana Cloud slug or *.grafana.net host")
-		}
-		slug := strings.TrimSuffix(host, ".grafana.net")
-		return slug, "https://" + host, nil
-	}
-	return host, "https://" + host + ".grafana.net", nil
-}
-
-func inferDatasourceEndpoints(payload any) inferredStackEndpoints {
-	items, _, ok := collectionPayload(payload)
-	if !ok {
-		return inferredStackEndpoints{}
-	}
-	out := inferredStackEndpoints{}
-	for _, item := range items {
-		record, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		dataType := strings.ToLower(firstNonEmptyString(record, "type", "slug", "name"))
-		endpoint := firstNonEmptyString(record, "url", "endpoint", "proxyUrl", "proxy_url")
-		switch {
-		case endpoint == "":
-			continue
-		case out.PrometheusURL == "" && containsAny(dataType, "prometheus", "mimir"):
-			out.PrometheusURL = endpoint
-		case out.LogsURL == "" && containsAny(dataType, "loki", "logs"):
-			out.LogsURL = endpoint
-		case out.TracesURL == "" && containsAny(dataType, "tempo", "traces"):
-			out.TracesURL = endpoint
-		}
-	}
-	return out
 }
 
 func inferOnCallURL(payload any) string {

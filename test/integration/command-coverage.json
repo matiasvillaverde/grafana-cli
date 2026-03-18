@@ -95,6 +95,10 @@
       "test": "TestAssistantAccessCloud",
       "commands": [
         "cloud stacks list",
+        "cloud stacks inspect",
+        "cloud stacks plugins list",
+        "cloud stacks plugins get",
+        "cloud billed-usage get",
         "cloud access-policies list",
         "cloud access-policies get",
         "service-accounts list",
