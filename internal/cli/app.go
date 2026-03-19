@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -41,6 +42,7 @@ type APIClient interface {
 	DeleteDashboard(ctx context.Context, uid string) (any, error)
 	DashboardVersions(ctx context.Context, uid string, limit int) (any, error)
 	RenderDashboard(ctx context.Context, req grafana.DashboardRenderRequest) (grafana.RenderedDashboard, error)
+	CreateShortURL(ctx context.Context, req grafana.ShortURLRequest) (any, error)
 	ListDatasources(ctx context.Context) (any, error)
 	GetDatasource(ctx context.Context, uid string) (any, error)
 	DatasourceHealth(ctx context.Context, uid string) (any, error)
@@ -622,6 +624,60 @@ func (a *App) runDashboards(ctx context.Context, opts globalOptions, args []stri
 			"bytes":        rendered.Bytes,
 			"endpoint":     rendered.Endpoint,
 		})
+	case "share":
+		fs := flag.NewFlagSet("dashboards share", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		uid := fs.String("uid", "", "dashboard UID")
+		slug := fs.String("slug", "", "dashboard slug")
+		panelID := fs.Int64("panel-id", 0, "panel ID for panel share links")
+		from := fs.String("from", "", "time range start")
+		to := fs.String("to", "", "time range end")
+		theme := fs.String("theme", "", "share theme")
+		orgID := fs.Int64("org-id", 0, "organization ID override")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if strings.TrimSpace(*uid) == "" {
+			return errors.New("--uid is required")
+		}
+
+		effectiveOrgID, err := resolveDashboardShareOrgID(ctx, client, cfg, *orgID)
+		if err != nil {
+			return err
+		}
+
+		sharePath := buildDashboardSharePath(*uid, *slug, *panelID, *from, *to, *theme, effectiveOrgID)
+		result, err := client.CreateShortURL(ctx, grafana.ShortURLRequest{
+			Path:  sharePath,
+			OrgID: effectiveOrgID,
+		})
+		if err != nil {
+			return err
+		}
+
+		payload, ok := result.(map[string]any)
+		if !ok {
+			return a.emit(opts, map[string]any{
+				"dashboard_uid": *uid,
+				"panel_id":      *panelID,
+				"share_path":    sharePath,
+				"result":        result,
+			})
+		}
+
+		enriched := map[string]any{}
+		for key, value := range payload {
+			enriched[key] = value
+		}
+		enriched["dashboard_uid"] = *uid
+		enriched["panel_id"] = *panelID
+		enriched["share_path"] = sharePath
+		if shortURL, ok := payload["url"].(string); ok && strings.TrimSpace(shortURL) != "" {
+			if absoluteURL, ok := resolveShortURLAbsolute(cfg.BaseURL, shortURL); ok {
+				enriched["absolute_url"] = absoluteURL
+			}
+		}
+		return a.emit(opts, enriched)
 	default:
 		return fmt.Errorf("unknown dashboards command: %s", args[0])
 	}
@@ -2213,6 +2269,73 @@ func appendQuery(path string, query url.Values) string {
 		return path
 	}
 	return path + "?" + encoded
+}
+
+func buildDashboardSharePath(uid, slug string, panelID int64, from, to, theme string, orgID int64) string {
+	trimmedUID := strings.TrimSpace(uid)
+	trimmedSlug := strings.TrimSpace(slug)
+	if trimmedSlug == "" {
+		trimmedSlug = "share"
+	}
+
+	path := "/d/" + url.PathEscape(trimmedUID) + "/" + url.PathEscape(trimmedSlug)
+	query := url.Values{}
+	if panelID > 0 {
+		path = "/d-solo/" + url.PathEscape(trimmedUID) + "/" + url.PathEscape(trimmedSlug)
+		query.Set("panelId", strconv.FormatInt(panelID, 10))
+	}
+	if strings.TrimSpace(from) != "" {
+		query.Set("from", from)
+	}
+	if strings.TrimSpace(to) != "" {
+		query.Set("to", to)
+	}
+	if strings.TrimSpace(theme) != "" {
+		query.Set("theme", theme)
+	}
+	if orgID > 0 {
+		query.Set("orgId", strconv.FormatInt(orgID, 10))
+	}
+	return appendQuery(path, query)
+}
+
+func resolveDashboardShareOrgID(ctx context.Context, client APIClient, cfg config.Config, explicitOrgID int64) (int64, error) {
+	if explicitOrgID > 0 {
+		return explicitOrgID, nil
+	}
+	if cfg.OrgID > 0 {
+		return cfg.OrgID, nil
+	}
+
+	payload, err := client.Raw(ctx, http.MethodGet, "/api/org", nil)
+	if err != nil {
+		return 0, fmt.Errorf("org ID is not configured and current org lookup failed: %w", err)
+	}
+	orgID, ok := intPath(payload, "id")
+	if !ok || orgID <= 0 {
+		return 0, errors.New("org ID is not configured and current org lookup did not return a valid id; pass --org-id or run `grafana config set org-id <id>`")
+	}
+	return int64(orgID), nil
+}
+
+func resolveShortURLAbsolute(baseURL, shortURL string) (string, bool) {
+	parsedShortURL, err := url.Parse(strings.TrimSpace(shortURL))
+	if err != nil {
+		return "", false
+	}
+	if parsedShortURL.Scheme != "" && parsedShortURL.Host != "" {
+		return parsedShortURL.String(), true
+	}
+
+	parsedBaseURL, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil || parsedBaseURL.Scheme == "" || parsedBaseURL.Host == "" {
+		return "", false
+	}
+	parsedBaseURL.Path = ""
+	parsedBaseURL.RawPath = ""
+	parsedBaseURL.RawQuery = ""
+	parsedBaseURL.Fragment = ""
+	return parsedBaseURL.ResolveReference(parsedShortURL).String(), true
 }
 
 func normalizeQueryHistoryBound(now time.Time, value string) string {

@@ -33,6 +33,7 @@
         "dashboards delete",
         "dashboards versions",
         "dashboards render",
+        "dashboards share",
         "datasources list",
         "datasources get",
         "datasources health",

@@ -69,6 +69,12 @@ type DashboardRenderRequest struct {
 	TZ      string `json:"tz"`
 }
 
+// ShortURLRequest defines options for Grafana short URL creation.
+type ShortURLRequest struct {
+	Path  string `json:"path"`
+	OrgID int64  `json:"org_id"`
+}
+
 // RenderedDashboard contains the rendered artifact and response metadata.
 type RenderedDashboard struct {
 	Data        []byte `json:"-"`
@@ -252,6 +258,23 @@ func (c *Client) RenderDashboard(ctx context.Context, req DashboardRenderRequest
 		Endpoint:    u,
 		Bytes:       len(data),
 	}, nil
+}
+
+func (c *Client) CreateShortURL(ctx context.Context, req ShortURLRequest) (any, error) {
+	if strings.TrimSpace(c.cfg.BaseURL) == "" {
+		return nil, ErrMissingBaseURL
+	}
+	u, err := joinURL(c.cfg.BaseURL, "/api/short-urls", nil)
+	if err != nil {
+		return nil, err
+	}
+	orgID := c.cfg.OrgID
+	if req.OrgID > 0 {
+		orgID = req.OrgID
+	}
+	return c.requestJSONWithAuth(ctx, http.MethodPost, u, map[string]any{
+		"path": normalizeShortURLPath(req.Path),
+	}, c.cfg.Token, orgID)
 }
 
 func (c *Client) ListDatasources(ctx context.Context) (any, error) {
@@ -591,4 +614,8 @@ func joinURL(base, path string, query url.Values) (string, error) {
 	}
 	final.RawQuery = q.Encode()
 	return final.String(), nil
+}
+
+func normalizeShortURLPath(path string) string {
+	return strings.TrimPrefix(strings.TrimSpace(path), "/")
 }
