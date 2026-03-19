@@ -195,6 +195,9 @@ type fakeClient struct {
 	rawPath              string
 	rawBody              any
 	rawCalls             []string
+	createShortURLResp   any
+	createShortURLErr    error
+	createShortURLReq    grafana.ShortURLRequest
 	cloudResult          any
 	cloudErr             error
 	cloudStackSlug       string
@@ -322,6 +325,14 @@ func (f *fakeClient) Raw(_ context.Context, method, path string, body any) (any,
 		return result, nil
 	}
 	return f.rawResult, f.rawErr
+}
+
+func (f *fakeClient) CreateShortURL(_ context.Context, req grafana.ShortURLRequest) (any, error) {
+	f.createShortURLReq = req
+	if f.createShortURLErr != nil {
+		return nil, f.createShortURLErr
+	}
+	return f.createShortURLResp, nil
 }
 
 func (f *fakeClient) CloudStacks(_ context.Context) (any, error) {
@@ -1349,25 +1360,40 @@ func TestDashboardFolderAnnotationAndAlertingCommands(t *testing.T) {
 		t.Fatalf("unexpected render request: %+v", client.renderDashboardReq)
 	}
 
-	client.rawResponses = map[string]any{
-		"/api/short-urls": map[string]any{"uid": "short-1", "url": "/goto/short-1"},
-	}
+	client.createShortURLResp = map[string]any{"uid": "short-1", "url": "/goto/short-1"}
 	out.Reset()
 	if code := app.Run(context.Background(), []string{"dashboards", "share", "--uid", "ops", "--panel-id", "12", "--from", "now-6h", "--to", "now", "--theme", "light", "--org-id", "7"}); code != 0 {
 		t.Fatalf("dashboard share should succeed")
 	}
 	shared := decodeJSON(t, out.String())
-	if shared["uid"] != "ops" || shared["panel_id"] != float64(12) || shared["share_path"] != "d-solo/ops/share?from=now-6h&orgId=7&panelId=12&theme=light&to=now" {
+	if shared["uid"] != "ops" || shared["panel_id"] != float64(12) || shared["share_path"] != "/d-solo/ops/share?from=now-6h&orgId=7&panelId=12&theme=light&to=now" {
 		t.Fatalf("unexpected share output: %+v", shared)
 	}
 	if shared["absolute_url"] != "https://grafana.example/goto/short-1" {
 		t.Fatalf("unexpected share absolute url: %+v", shared)
 	}
-	if client.rawMethod != "POST" || client.rawPath != "/api/short-urls" {
-		t.Fatalf("unexpected share request route: method=%s path=%s", client.rawMethod, client.rawPath)
+	if client.createShortURLReq.Path != "/d-solo/ops/share?from=now-6h&orgId=7&panelId=12&theme=light&to=now" || client.createShortURLReq.OrgID != 7 {
+		t.Fatalf("unexpected share request: %+v", client.createShortURLReq)
 	}
-	if body, ok := client.rawBody.(map[string]any); !ok || body["path"] != "d-solo/ops/share?from=now-6h&orgId=7&panelId=12&theme=light&to=now" {
-		t.Fatalf("unexpected share request body: %+v", client.rawBody)
+
+	client.createShortURLResp = map[string]any{"uid": "short-2", "url": "https://grafana.example/goto/short-2?orgId=1"}
+	out.Reset()
+	if code := app.Run(context.Background(), []string{"dashboards", "share", "--uid", "ops"}); code != 0 {
+		t.Fatalf("dashboard share with absolute url should succeed")
+	}
+	shared = decodeJSON(t, out.String())
+	if shared["share_path"] != "/d/ops/share" || shared["absolute_url"] != "https://grafana.example/goto/short-2?orgId=1" {
+		t.Fatalf("unexpected absolute short url output: %+v", shared)
+	}
+
+	client.createShortURLResp = "short-raw"
+	out.Reset()
+	if code := app.Run(context.Background(), []string{"dashboards", "share", "--uid", "ops"}); code != 0 {
+		t.Fatalf("dashboard share raw fallback should succeed")
+	}
+	shared = decodeJSON(t, out.String())
+	if shared["share_path"] != "/d/ops/share" || shared["result"] != "short-raw" {
+		t.Fatalf("unexpected share fallback output: %+v", shared)
 	}
 
 	out.Reset()
@@ -2034,6 +2060,9 @@ func TestAuthDoctorPayloadAndReadOnly(t *testing.T) {
 	if err := enforceReadOnly([]string{"dashboards", "create", "--title", "Ops"}); err == nil {
 		t.Fatalf("expected read-only enforcement for dashboard create")
 	}
+	if err := enforceReadOnly([]string{"dashboards", "share", "--uid", "ops"}); err == nil {
+		t.Fatalf("expected read-only enforcement for dashboard share")
+	}
 	if err := enforceConfirmation([]string{"auth", "logout"}); err == nil {
 		t.Fatalf("expected confirmation enforcement for auth logout")
 	}
@@ -2067,6 +2096,13 @@ func TestAuthDoctorPayloadAndReadOnly(t *testing.T) {
 	}
 	if !strings.Contains(errOut.String(), "blocked by --read-only") {
 		t.Fatalf("expected read-only error, got %q", errOut.String())
+	}
+	errOut.Reset()
+	if code := app.Run(context.Background(), []string{"--read-only", "dashboards", "share", "--uid", "ops"}); code != 1 {
+		t.Fatalf("expected read-only dashboards share failure")
+	}
+	if !strings.Contains(errOut.String(), "blocked by --read-only") {
+		t.Fatalf("expected read-only share error, got %q", errOut.String())
 	}
 	errOut.Reset()
 	if code := app.Run(context.Background(), []string{"--read-only", "api", "GET", "/api/test"}); code != 0 {
@@ -2983,7 +3019,7 @@ func TestRequireAuthAndClientErrors(t *testing.T) {
 
 	store = &fakeStore{cfg: config.Config{Token: "x"}}
 	client = &fakeClient{
-		rawErrors:          map[string]error{"/api/short-urls": errors.New("share fail")},
+		createShortURLErr:  errors.New("share fail"),
 		getDashErr:         errors.New("get dash fail"),
 		deleteDashErr:      errors.New("delete dash fail"),
 		dashVersionsErr:    errors.New("versions fail"),
@@ -3898,6 +3934,26 @@ func TestAuthInferenceHelpers(t *testing.T) {
 		t.Fatalf("unexpected scalar cloud collection result: payload=%+v count=%d truncated=%v err=%v", scalarPayload, count, truncated, err)
 	}
 
+	filteredPayload, count, truncated, err := app.listCloudCollection(context.Background(), func(context.Context, int, string) (any, error) {
+		return map[string]any{
+			"items": []any{
+				map[string]any{"id": "skip"},
+				map[string]any{"id": "keep"},
+			},
+		}, nil
+	}, cloudListOptions{
+		Limit: 10,
+		Include: func(record map[string]any) bool {
+			return record["id"] == "keep"
+		},
+	})
+	if err != nil || count != 1 || truncated {
+		t.Fatalf("unexpected filtered cloud collection result: payload=%+v count=%d truncated=%v err=%v", filteredPayload, count, truncated, err)
+	}
+	if len(filteredPayload.(map[string]any)["items"].([]any)) != 1 {
+		t.Fatalf("expected one filtered cloud collection item, got %+v", filteredPayload)
+	}
+
 	meta := accessPolicyMetadata(0, false)
 	if meta.Count != nil || meta.Truncated {
 		t.Fatalf("unexpected non-truncated access policy metadata: %+v", meta)
@@ -4552,10 +4608,10 @@ func TestContextConfigAndOutputEdgeBranches(t *testing.T) {
 }
 
 func TestBuildDashboardSharePath(t *testing.T) {
-	if got := buildDashboardSharePath("ops", "", 0, "", "", "", 0); got != "d/ops/share" {
+	if got := buildDashboardSharePath("ops", "", 0, "", "", "", 0); got != "/d/ops/share" {
 		t.Fatalf("unexpected dashboard share path: %s", got)
 	}
-	if got := buildDashboardSharePath("ops", "overview", 4, "now-1h", "now", "dark", 12); got != "d-solo/ops/overview?from=now-1h&orgId=12&panelId=4&theme=dark&to=now" {
+	if got := buildDashboardSharePath("ops", "overview", 4, "now-1h", "now", "dark", 12); got != "/d-solo/ops/overview?from=now-1h&orgId=12&panelId=4&theme=dark&to=now" {
 		t.Fatalf("unexpected panel share path: %s", got)
 	}
 }

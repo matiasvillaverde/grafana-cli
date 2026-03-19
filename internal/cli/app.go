@@ -41,6 +41,7 @@ type APIClient interface {
 	DeleteDashboard(ctx context.Context, uid string) (any, error)
 	DashboardVersions(ctx context.Context, uid string, limit int) (any, error)
 	RenderDashboard(ctx context.Context, req grafana.DashboardRenderRequest) (grafana.RenderedDashboard, error)
+	CreateShortURL(ctx context.Context, req grafana.ShortURLRequest) (any, error)
 	ListDatasources(ctx context.Context) (any, error)
 	GetDatasource(ctx context.Context, uid string) (any, error)
 	DatasourceHealth(ctx context.Context, uid string) (any, error)
@@ -640,7 +641,10 @@ func (a *App) runDashboards(ctx context.Context, opts globalOptions, args []stri
 		}
 
 		sharePath := buildDashboardSharePath(*uid, *slug, *panelID, *from, *to, *theme, *orgID)
-		result, err := client.Raw(ctx, "POST", "/api/short-urls", map[string]any{"path": sharePath})
+		result, err := client.CreateShortURL(ctx, grafana.ShortURLRequest{
+			Path:  sharePath,
+			OrgID: *orgID,
+		})
 		if err != nil {
 			return err
 		}
@@ -662,8 +666,12 @@ func (a *App) runDashboards(ctx context.Context, opts globalOptions, args []stri
 		enriched["uid"] = *uid
 		enriched["panel_id"] = *panelID
 		enriched["share_path"] = sharePath
-		if shortURL, ok := payload["url"].(string); ok && strings.TrimSpace(shortURL) != "" && strings.HasPrefix(shortURL, "/") {
-			enriched["absolute_url"] = strings.TrimRight(cfg.BaseURL, "/") + shortURL
+		if shortURL, ok := payload["url"].(string); ok && strings.TrimSpace(shortURL) != "" {
+			if strings.HasPrefix(shortURL, "/") {
+				enriched["absolute_url"] = strings.TrimRight(cfg.BaseURL, "/") + shortURL
+			} else if parsed, err := url.Parse(shortURL); err == nil && parsed.Scheme != "" && parsed.Host != "" {
+				enriched["absolute_url"] = shortURL
+			}
 		}
 		return a.emit(opts, enriched)
 	default:
@@ -2266,10 +2274,10 @@ func buildDashboardSharePath(uid, slug string, panelID int64, from, to, theme st
 		trimmedSlug = "share"
 	}
 
-	path := "d/" + url.PathEscape(trimmedUID) + "/" + url.PathEscape(trimmedSlug)
+	path := "/d/" + url.PathEscape(trimmedUID) + "/" + url.PathEscape(trimmedSlug)
 	query := url.Values{}
 	if panelID > 0 {
-		path = "d-solo/" + url.PathEscape(trimmedUID) + "/" + url.PathEscape(trimmedSlug)
+		path = "/d-solo/" + url.PathEscape(trimmedUID) + "/" + url.PathEscape(trimmedSlug)
 		query.Set("panelId", strconv.FormatInt(panelID, 10))
 	}
 	if strings.TrimSpace(from) != "" {

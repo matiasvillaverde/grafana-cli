@@ -66,6 +66,45 @@ func TestClientRawSetsHeadersAndBody(t *testing.T) {
 	}
 }
 
+func TestCreateShortURLNormalizesPathAndOrgOverride(t *testing.T) {
+	t.Helper()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("expected POST, got %s", r.Method)
+		}
+		if r.URL.Path != "/api/short-urls" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if r.Header.Get("Authorization") != "Bearer token" {
+			t.Fatalf("missing auth header")
+		}
+		if r.Header.Get("X-Grafana-Org-Id") != "7" {
+			t.Fatalf("unexpected org header: %q", r.Header.Get("X-Grafana-Org-Id"))
+		}
+		body, _ := io.ReadAll(r.Body)
+		if string(body) != `{"path":"d/ops/share?orgId=7"}` {
+			t.Fatalf("unexpected short url body: %s", body)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"url":"https://grafana.example/goto/short-1?orgId=7"}`))
+	}))
+	defer srv.Close()
+
+	client := NewClient(config.Config{BaseURL: srv.URL, Token: "token", OrgID: 12}, srv.Client())
+	resp, err := client.CreateShortURL(context.Background(), ShortURLRequest{
+		Path:  "/d/ops/share?orgId=7",
+		OrgID: 7,
+	})
+	if err != nil {
+		t.Fatalf("unexpected create short url error: %v", err)
+	}
+	result, ok := resp.(map[string]any)
+	if !ok || result["url"] != "https://grafana.example/goto/short-1?orgId=7" {
+		t.Fatalf("unexpected short url response: %+v", resp)
+	}
+}
+
 func TestHTTPErrorErrorString(t *testing.T) {
 	err := (&HTTPError{StatusCode: 500, Body: "boom"}).Error()
 	if !strings.Contains(err, "status=500") || !strings.Contains(err, "boom") {
@@ -288,6 +327,9 @@ func TestClientMissingBaseURLPaths(t *testing.T) {
 	}
 	if _, err := client.CreateDashboard(context.Background(), map[string]any{"title": "x"}, 0, false); !errors.Is(err, ErrMissingBaseURL) {
 		t.Fatalf("expected ErrMissingBaseURL for create dashboard, got %v", err)
+	}
+	if _, err := client.CreateShortURL(context.Background(), ShortURLRequest{Path: "/d/ops/share"}); !errors.Is(err, ErrMissingBaseURL) {
+		t.Fatalf("expected ErrMissingBaseURL for create short url, got %v", err)
 	}
 	if _, err := client.ListDatasources(context.Background()); !errors.Is(err, ErrMissingBaseURL) {
 		t.Fatalf("expected ErrMissingBaseURL for list datasources, got %v", err)
