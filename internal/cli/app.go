@@ -658,10 +658,10 @@ func (a *App) runDashboards(ctx context.Context, opts globalOptions, args []stri
 		payload, ok := result.(map[string]any)
 		if !ok {
 			return a.emit(opts, map[string]any{
-				"uid":        *uid,
-				"panel_id":   *panelID,
-				"share_path": sharePath,
-				"result":     result,
+				"dashboard_uid": *uid,
+				"panel_id":      *panelID,
+				"share_path":    sharePath,
+				"result":        result,
 			})
 		}
 
@@ -669,7 +669,7 @@ func (a *App) runDashboards(ctx context.Context, opts globalOptions, args []stri
 		for key, value := range payload {
 			enriched[key] = value
 		}
-		enriched["uid"] = *uid
+		enriched["dashboard_uid"] = *uid
 		enriched["panel_id"] = *panelID
 		enriched["share_path"] = sharePath
 		if shortURL, ok := payload["url"].(string); ok && strings.TrimSpace(shortURL) != "" {

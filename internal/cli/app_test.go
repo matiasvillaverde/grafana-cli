@@ -1366,7 +1366,7 @@ func TestDashboardFolderAnnotationAndAlertingCommands(t *testing.T) {
 		t.Fatalf("dashboard share should succeed")
 	}
 	shared := decodeJSON(t, out.String())
-	if shared["uid"] != "ops" || shared["panel_id"] != float64(12) || shared["share_path"] != "/d-solo/ops/share?from=now-6h&orgId=7&panelId=12&theme=light&to=now" {
+	if shared["uid"] != "short-1" || shared["dashboard_uid"] != "ops" || shared["panel_id"] != float64(12) || shared["share_path"] != "/d-solo/ops/share?from=now-6h&orgId=7&panelId=12&theme=light&to=now" {
 		t.Fatalf("unexpected share output: %+v", shared)
 	}
 	if shared["absolute_url"] != "https://grafana.example/goto/short-1" {
@@ -1383,7 +1383,7 @@ func TestDashboardFolderAnnotationAndAlertingCommands(t *testing.T) {
 		t.Fatalf("dashboard share with absolute url should succeed")
 	}
 	shared = decodeJSON(t, out.String())
-	if shared["share_path"] != "/d/ops/share?orgId=3" || shared["absolute_url"] != "https://grafana.example/goto/short-2?orgId=1" {
+	if shared["uid"] != "short-2" || shared["dashboard_uid"] != "ops" || shared["share_path"] != "/d/ops/share?orgId=3" || shared["absolute_url"] != "https://grafana.example/goto/short-2?orgId=1" {
 		t.Fatalf("unexpected absolute short url output: %+v", shared)
 	}
 	if client.createShortURLReq.Path != "/d/ops/share?orgId=3" || client.createShortURLReq.OrgID != 3 || client.rawMethod != "GET" || client.rawPath != "/api/org" {
@@ -1398,7 +1398,7 @@ func TestDashboardFolderAnnotationAndAlertingCommands(t *testing.T) {
 		t.Fatalf("dashboard share with configured org should succeed")
 	}
 	shared = decodeJSON(t, out.String())
-	if shared["share_path"] != "/d/ops/share?orgId=5" || shared["absolute_url"] != "https://grafana.example/goto/short-3" {
+	if shared["uid"] != "short-3" || shared["dashboard_uid"] != "ops" || shared["share_path"] != "/d/ops/share?orgId=5" || shared["absolute_url"] != "https://grafana.example/goto/short-3" {
 		t.Fatalf("unexpected configured-org share output: %+v", shared)
 	}
 	if client.createShortURLReq.Path != "/d/ops/share?orgId=5" || client.createShortURLReq.OrgID != 5 {
@@ -1411,8 +1411,11 @@ func TestDashboardFolderAnnotationAndAlertingCommands(t *testing.T) {
 		t.Fatalf("dashboard share raw fallback should succeed")
 	}
 	shared = decodeJSON(t, out.String())
-	if shared["share_path"] != "/d/ops/share?orgId=5" || shared["result"] != "short-raw" {
+	if shared["dashboard_uid"] != "ops" || shared["share_path"] != "/d/ops/share?orgId=5" || shared["result"] != "short-raw" {
 		t.Fatalf("unexpected share fallback output: %+v", shared)
+	}
+	if _, ok := shared["uid"]; ok {
+		t.Fatalf("expected raw fallback to avoid synthetic uid: %+v", shared)
 	}
 
 	store.cfg.OrgID = 0
