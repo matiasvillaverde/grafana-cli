@@ -23,7 +23,7 @@ exists rendered/panel.png
 
 exec grafana dashboards share --uid integration-dash --panel-id 1 --from now-6h --to now
 stdout '"uid":"integration-dash"'
-stdout '"share_path":"/d-solo/integration-dash/share?from=now-6h\u0026panelId=1\u0026to=now"'
+stdout '"share_path":"/d-solo/integration-dash/share\?from=now-6h\\u0026panelId=1\\u0026to=now"'
 
 exec grafana datasources list
 stdout '"uid":"prometheus"'
