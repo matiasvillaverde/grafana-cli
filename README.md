@@ -148,6 +148,7 @@ export PATH="$PATH:$(go env GOPATH)/bin"
 | `dashboards delete --uid ...` | Delete a dashboard by UID |
 | `dashboards versions --uid ...` | List dashboard version history |
 | `dashboards render --uid ...` | Render a dashboard or panel to PNG |
+| `dashboards share --uid ...` | Create a short share URL for a dashboard or panel |
 | `datasources list` | List datasources with optional type/name filtering |
 | `datasources get --uid ...` | Get one datasource by UID |
 | `datasources health --uid ...` | Run a datasource health check |

@@ -622,6 +622,50 @@ func (a *App) runDashboards(ctx context.Context, opts globalOptions, args []stri
 			"bytes":        rendered.Bytes,
 			"endpoint":     rendered.Endpoint,
 		})
+	case "share":
+		fs := flag.NewFlagSet("dashboards share", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		uid := fs.String("uid", "", "dashboard UID")
+		slug := fs.String("slug", "", "dashboard slug")
+		panelID := fs.Int64("panel-id", 0, "panel ID for panel share links")
+		from := fs.String("from", "", "time range start")
+		to := fs.String("to", "", "time range end")
+		theme := fs.String("theme", "", "share theme")
+		orgID := fs.Int64("org-id", 0, "organization ID override")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if strings.TrimSpace(*uid) == "" {
+			return errors.New("--uid is required")
+		}
+
+		sharePath := buildDashboardSharePath(*uid, *slug, *panelID, *from, *to, *theme, *orgID)
+		result, err := client.Raw(ctx, "POST", "/api/short-urls", map[string]any{"path": sharePath})
+		if err != nil {
+			return err
+		}
+
+		payload, ok := result.(map[string]any)
+		if !ok {
+			return a.emit(opts, map[string]any{
+				"uid":        *uid,
+				"panel_id":   *panelID,
+				"share_path": sharePath,
+				"result":     result,
+			})
+		}
+
+		enriched := map[string]any{}
+		for key, value := range payload {
+			enriched[key] = value
+		}
+		enriched["uid"] = *uid
+		enriched["panel_id"] = *panelID
+		enriched["share_path"] = sharePath
+		if shortURL, ok := payload["url"].(string); ok && strings.TrimSpace(shortURL) != "" && strings.HasPrefix(shortURL, "/") {
+			enriched["absolute_url"] = strings.TrimRight(cfg.BaseURL, "/") + shortURL
+		}
+		return a.emit(opts, enriched)
 	default:
 		return fmt.Errorf("unknown dashboards command: %s", args[0])
 	}
@@ -2213,6 +2257,34 @@ func appendQuery(path string, query url.Values) string {
 		return path
 	}
 	return path + "?" + encoded
+}
+
+func buildDashboardSharePath(uid, slug string, panelID int64, from, to, theme string, orgID int64) string {
+	trimmedUID := strings.TrimSpace(uid)
+	trimmedSlug := strings.TrimSpace(slug)
+	if trimmedSlug == "" {
+		trimmedSlug = "share"
+	}
+
+	path := "/d/" + url.PathEscape(trimmedUID) + "/" + url.PathEscape(trimmedSlug)
+	query := url.Values{}
+	if panelID > 0 {
+		path = "/d-solo/" + url.PathEscape(trimmedUID) + "/" + url.PathEscape(trimmedSlug)
+		query.Set("panelId", strconv.FormatInt(panelID, 10))
+	}
+	if strings.TrimSpace(from) != "" {
+		query.Set("from", from)
+	}
+	if strings.TrimSpace(to) != "" {
+		query.Set("to", to)
+	}
+	if strings.TrimSpace(theme) != "" {
+		query.Set("theme", theme)
+	}
+	if orgID > 0 {
+		query.Set("orgId", strconv.FormatInt(orgID, 10))
+	}
+	return appendQuery(path, query)
 }
 
 func normalizeQueryHistoryBound(now time.Time, value string) string {

@@ -1287,7 +1287,7 @@ func TestCloudStacksInspectWarningsAndHelp(t *testing.T) {
 }
 
 func TestDashboardFolderAnnotationAndAlertingCommands(t *testing.T) {
-	store := &fakeStore{cfg: config.Config{Token: "token"}}
+	store := &fakeStore{cfg: config.Config{Token: "token", BaseURL: "https://grafana.example"}}
 	client := &fakeClient{
 		getDashResult:       map[string]any{"dashboard": map[string]any{"uid": "ops"}},
 		deleteDashResult:    map[string]any{"status": "deleted"},
@@ -1347,6 +1347,27 @@ func TestDashboardFolderAnnotationAndAlertingCommands(t *testing.T) {
 	}
 	if client.renderDashboardReq.PanelID != 12 || client.renderDashboardReq.UID != "ops" || client.renderDashboardReq.Theme != "light" {
 		t.Fatalf("unexpected render request: %+v", client.renderDashboardReq)
+	}
+
+	client.rawResponses = map[string]any{
+		"/api/short-urls": map[string]any{"uid": "short-1", "url": "/goto/short-1"},
+	}
+	out.Reset()
+	if code := app.Run(context.Background(), []string{"dashboards", "share", "--uid", "ops", "--panel-id", "12", "--from", "now-6h", "--to", "now", "--theme", "light", "--org-id", "7"}); code != 0 {
+		t.Fatalf("dashboard share should succeed")
+	}
+	shared := decodeJSON(t, out.String())
+	if shared["uid"] != "ops" || shared["panel_id"] != float64(12) || shared["share_path"] != "/d-solo/ops/share?from=now-6h&orgId=7&panelId=12&theme=light&to=now" {
+		t.Fatalf("unexpected share output: %+v", shared)
+	}
+	if shared["absolute_url"] != "https://grafana.example/goto/short-1" {
+		t.Fatalf("unexpected share absolute url: %+v", shared)
+	}
+	if client.rawMethod != "POST" || client.rawPath != "/api/short-urls" {
+		t.Fatalf("unexpected share request route: method=%s path=%s", client.rawMethod, client.rawPath)
+	}
+	if body, ok := client.rawBody.(map[string]any); !ok || body["path"] != "/d-solo/ops/share?from=now-6h&orgId=7&panelId=12&theme=light&to=now" {
+		t.Fatalf("unexpected share request body: %+v", client.rawBody)
 	}
 
 	out.Reset()
@@ -1428,6 +1449,9 @@ func TestDashboardFolderAnnotationAndAlertingCommands(t *testing.T) {
 	if code := app.Run(context.Background(), []string{"dashboards", "render", "--uid", "ops"}); code != 1 {
 		t.Fatalf("dashboard render missing out should fail")
 	}
+	if code := app.Run(context.Background(), []string{"dashboards", "share"}); code != 1 {
+		t.Fatalf("dashboard share missing uid should fail")
+	}
 	if code := app.Run(context.Background(), []string{"dashboards", "render", "--out", renderPath}); code != 1 {
 		t.Fatalf("dashboard render missing uid should fail")
 	}
@@ -1442,6 +1466,9 @@ func TestDashboardFolderAnnotationAndAlertingCommands(t *testing.T) {
 	}
 	if code := app.Run(context.Background(), []string{"dashboards", "render", "--bad"}); code != 1 {
 		t.Fatalf("dashboard render parse should fail")
+	}
+	if code := app.Run(context.Background(), []string{"dashboards", "share", "--bad"}); code != 1 {
+		t.Fatalf("dashboard share parse should fail")
 	}
 
 	badOut := filepath.Join(t.TempDir(), "parent-file")
@@ -2956,6 +2983,7 @@ func TestRequireAuthAndClientErrors(t *testing.T) {
 
 	store = &fakeStore{cfg: config.Config{Token: "x"}}
 	client = &fakeClient{
+		rawErrors:          map[string]error{"/api/short-urls": errors.New("share fail")},
 		getDashErr:         errors.New("get dash fail"),
 		deleteDashErr:      errors.New("delete dash fail"),
 		dashVersionsErr:    errors.New("versions fail"),
@@ -2979,6 +3007,9 @@ func TestRequireAuthAndClientErrors(t *testing.T) {
 	}
 	if code := app.Run(context.Background(), []string{"dashboards", "render", "--uid", "ops", "--out", filepath.Join(t.TempDir(), "x.png")}); code != 1 {
 		t.Fatalf("expected dashboard render client failure")
+	}
+	if code := app.Run(context.Background(), []string{"dashboards", "share", "--uid", "ops"}); code != 1 {
+		t.Fatalf("expected dashboard share client failure")
 	}
 	if code := app.Run(context.Background(), []string{"folders", "list"}); code != 1 {
 		t.Fatalf("expected folders list client failure")
@@ -4517,5 +4548,14 @@ func TestContextConfigAndOutputEdgeBranches(t *testing.T) {
 	}
 	if builder.String() != "{\"name\":\"grafana\"}\n" {
 		t.Fatalf("unexpected template json output: %q", builder.String())
+	}
+}
+
+func TestBuildDashboardSharePath(t *testing.T) {
+	if got := buildDashboardSharePath("ops", "", 0, "", "", "", 0); got != "/d/ops/share" {
+		t.Fatalf("unexpected dashboard share path: %s", got)
+	}
+	if got := buildDashboardSharePath("ops", "overview", 4, "now-1h", "now", "dark", 12); got != "/d-solo/ops/overview?from=now-1h&orgId=12&panelId=4&theme=dark&to=now" {
+		t.Fatalf("unexpected panel share path: %s", got)
 	}
 }

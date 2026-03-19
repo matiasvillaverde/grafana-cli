@@ -21,6 +21,10 @@ exec grafana dashboards render --uid integration-dash --panel-id 1 --out rendere
 stdout '"content_type":"image/png"'
 exists rendered/panel.png
 
+exec grafana dashboards share --uid integration-dash --panel-id 1 --from now-6h --to now
+stdout '"uid":"integration-dash"'
+stdout '"share_path":"/d-solo/integration-dash/share?from=now-6h&panelId=1&to=now"'
+
 exec grafana datasources list
 stdout '"uid":"prometheus"'
 stdout '"uid":"loki"'
