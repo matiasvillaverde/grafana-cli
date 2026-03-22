@@ -132,6 +132,69 @@ func TestCreateShortURLUsesConfiguredOrgWhenOverrideMissing(t *testing.T) {
 	}
 }
 
+func TestPermissionMethods(t *testing.T) {
+	hits := make(map[string]int)
+	bodies := make(map[string]string)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		key := r.Method + " " + r.URL.Path
+		hits[key]++
+		if r.Body != nil {
+			data, _ := io.ReadAll(r.Body)
+			bodies[key] = string(data)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch key {
+		case "GET /api/dashboards/uid/ops/permissions":
+			_, _ = w.Write([]byte(`[{"role":"Viewer","permission":1}]`))
+		case "POST /api/dashboards/uid/ops/permissions":
+			_, _ = w.Write([]byte(`{"message":"dashboard permissions updated"}`))
+		case "GET /api/folders/ops/permissions":
+			_, _ = w.Write([]byte(`[{"teamId":7,"permission":2}]`))
+		case "POST /api/folders/ops/permissions":
+			_, _ = w.Write([]byte(`{"message":"folder permissions updated"}`))
+		default:
+			t.Fatalf("unexpected permissions endpoint: %s", key)
+		}
+	}))
+	defer srv.Close()
+
+	client := NewClient(config.Config{BaseURL: srv.URL}, srv.Client())
+	items := PermissionUpdateRequest{
+		Items: []PermissionUpdateItem{
+			{Role: "Viewer", Permission: 1},
+			{TeamID: 7, Permission: 2},
+			{UserID: 11, Permission: 4},
+		},
+	}
+
+	if _, err := client.DashboardPermissions(context.Background(), "ops"); err != nil {
+		t.Fatalf("dashboard permissions failed: %v", err)
+	}
+	if _, err := client.UpdateDashboardPermissions(context.Background(), "ops", items); err != nil {
+		t.Fatalf("update dashboard permissions failed: %v", err)
+	}
+	if _, err := client.FolderPermissions(context.Background(), "ops"); err != nil {
+		t.Fatalf("folder permissions failed: %v", err)
+	}
+	if _, err := client.UpdateFolderPermissions(context.Background(), "ops", items); err != nil {
+		t.Fatalf("update folder permissions failed: %v", err)
+	}
+
+	if hits["GET /api/dashboards/uid/ops/permissions"] != 1 || hits["POST /api/dashboards/uid/ops/permissions"] != 1 {
+		t.Fatalf("unexpected dashboard permission hits: %+v", hits)
+	}
+	if hits["GET /api/folders/ops/permissions"] != 1 || hits["POST /api/folders/ops/permissions"] != 1 {
+		t.Fatalf("unexpected folder permission hits: %+v", hits)
+	}
+	expectedBody := `{"items":[{"role":"Viewer","permission":1},{"teamId":7,"permission":2},{"userId":11,"permission":4}]}`
+	if bodies["POST /api/dashboards/uid/ops/permissions"] != expectedBody {
+		t.Fatalf("unexpected dashboard permissions body: %s", bodies["POST /api/dashboards/uid/ops/permissions"])
+	}
+	if bodies["POST /api/folders/ops/permissions"] != expectedBody {
+		t.Fatalf("unexpected folder permissions body: %s", bodies["POST /api/folders/ops/permissions"])
+	}
+}
+
 func TestHTTPErrorErrorString(t *testing.T) {
 	err := (&HTTPError{StatusCode: 500, Body: "boom"}).Error()
 	if !strings.Contains(err, "status=500") || !strings.Contains(err, "boom") {
@@ -379,6 +442,18 @@ func TestClientMissingBaseURLPaths(t *testing.T) {
 	if _, err := client.GetFolder(context.Background(), "x"); !errors.Is(err, ErrMissingBaseURL) {
 		t.Fatalf("expected ErrMissingBaseURL for get folder, got %v", err)
 	}
+	if _, err := client.DashboardPermissions(context.Background(), "x"); !errors.Is(err, ErrMissingBaseURL) {
+		t.Fatalf("expected ErrMissingBaseURL for dashboard permissions, got %v", err)
+	}
+	if _, err := client.UpdateDashboardPermissions(context.Background(), "x", PermissionUpdateRequest{}); !errors.Is(err, ErrMissingBaseURL) {
+		t.Fatalf("expected ErrMissingBaseURL for update dashboard permissions, got %v", err)
+	}
+	if _, err := client.FolderPermissions(context.Background(), "x"); !errors.Is(err, ErrMissingBaseURL) {
+		t.Fatalf("expected ErrMissingBaseURL for folder permissions, got %v", err)
+	}
+	if _, err := client.UpdateFolderPermissions(context.Background(), "x", PermissionUpdateRequest{}); !errors.Is(err, ErrMissingBaseURL) {
+		t.Fatalf("expected ErrMissingBaseURL for update folder permissions, got %v", err)
+	}
 	if _, err := client.ServiceAccounts(context.Background(), ServiceAccountListRequest{}); !errors.Is(err, ErrMissingBaseURL) {
 		t.Fatalf("expected ErrMissingBaseURL for service accounts, got %v", err)
 	}
@@ -490,6 +565,18 @@ func TestMethodInvalidURLBuildErrors(t *testing.T) {
 	}
 	if _, err := client.GetFolder(context.Background(), "x"); err == nil {
 		t.Fatalf("expected folder URL error")
+	}
+	if _, err := client.DashboardPermissions(context.Background(), "x"); err == nil {
+		t.Fatalf("expected dashboard permissions URL error")
+	}
+	if _, err := client.UpdateDashboardPermissions(context.Background(), "x", PermissionUpdateRequest{}); err == nil {
+		t.Fatalf("expected update dashboard permissions URL error")
+	}
+	if _, err := client.FolderPermissions(context.Background(), "x"); err == nil {
+		t.Fatalf("expected folder permissions URL error")
+	}
+	if _, err := client.UpdateFolderPermissions(context.Background(), "x", PermissionUpdateRequest{}); err == nil {
+		t.Fatalf("expected update folder permissions URL error")
 	}
 	if _, err := client.ListAnnotations(context.Background(), AnnotationListRequest{}); err == nil {
 		t.Fatalf("expected annotations URL error")
@@ -719,6 +806,22 @@ func TestClientDashboardFolderAnnotationAlertingMethods(t *testing.T) {
 	if _, err := client.GetFolder(context.Background(), "ops"); err != nil {
 		t.Fatalf("get folder failed: %v", err)
 	}
+	if _, err := client.DashboardPermissions(context.Background(), "ops"); err != nil {
+		t.Fatalf("dashboard permissions failed: %v", err)
+	}
+	if _, err := client.UpdateDashboardPermissions(context.Background(), "ops", PermissionUpdateRequest{
+		Items: []PermissionUpdateItem{{Role: "Viewer", Permission: 1}},
+	}); err != nil {
+		t.Fatalf("update dashboard permissions failed: %v", err)
+	}
+	if _, err := client.FolderPermissions(context.Background(), "ops"); err != nil {
+		t.Fatalf("folder permissions failed: %v", err)
+	}
+	if _, err := client.UpdateFolderPermissions(context.Background(), "ops", PermissionUpdateRequest{
+		Items: []PermissionUpdateItem{{Role: "Editor", Permission: 2}},
+	}); err != nil {
+		t.Fatalf("update folder permissions failed: %v", err)
+	}
 	if _, err := client.ListAnnotations(context.Background(), AnnotationListRequest{DashboardUID: "ops"}); err != nil {
 		t.Fatalf("list annotations failed: %v", err)
 	}
@@ -743,6 +846,12 @@ func TestClientDashboardFolderAnnotationAlertingMethods(t *testing.T) {
 	}
 	if hits["GET /api/folders"] != 1 || hits["GET /api/folders/ops"] != 1 {
 		t.Fatalf("unexpected folder hits: %+v", hits)
+	}
+	if hits["GET /api/dashboards/uid/ops/permissions"] != 1 || hits["POST /api/dashboards/uid/ops/permissions"] != 1 {
+		t.Fatalf("unexpected dashboard permission hits: %+v", hits)
+	}
+	if hits["GET /api/folders/ops/permissions"] != 1 || hits["POST /api/folders/ops/permissions"] != 1 {
+		t.Fatalf("unexpected folder permission hits: %+v", hits)
 	}
 	if hits["GET /api/annotations"] != 1 {
 		t.Fatalf("expected annotations hit: %+v", hits)

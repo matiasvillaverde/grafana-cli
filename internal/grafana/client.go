@@ -94,6 +94,19 @@ type AnnotationListRequest struct {
 	Type         string   `json:"type"`
 }
 
+// PermissionUpdateItem defines one dashboard or folder permission subject mapping.
+type PermissionUpdateItem struct {
+	Role       string `json:"role,omitempty"`
+	TeamID     int64  `json:"teamId,omitempty"`
+	UserID     int64  `json:"userId,omitempty"`
+	Permission int64  `json:"permission"`
+}
+
+// PermissionUpdateRequest defines the replacement set for dashboard/folder permissions.
+type PermissionUpdateRequest struct {
+	Items []PermissionUpdateItem `json:"items"`
+}
+
 // Client provides typed access to Grafana API domains.
 type Client struct {
 	cfg       config.Config
@@ -308,6 +321,50 @@ func (c *Client) GetFolder(ctx context.Context, uid string) (any, error) {
 		return nil, err
 	}
 	return c.requestJSON(ctx, http.MethodGet, u, nil)
+}
+
+func (c *Client) DashboardPermissions(ctx context.Context, uid string) (any, error) {
+	if strings.TrimSpace(c.cfg.BaseURL) == "" {
+		return nil, ErrMissingBaseURL
+	}
+	u, err := joinURL(c.cfg.BaseURL, "/api/dashboards/uid/"+url.PathEscape(uid)+"/permissions", nil)
+	if err != nil {
+		return nil, err
+	}
+	return c.requestJSON(ctx, http.MethodGet, u, nil)
+}
+
+func (c *Client) UpdateDashboardPermissions(ctx context.Context, uid string, req PermissionUpdateRequest) (any, error) {
+	if strings.TrimSpace(c.cfg.BaseURL) == "" {
+		return nil, ErrMissingBaseURL
+	}
+	u, err := joinURL(c.cfg.BaseURL, "/api/dashboards/uid/"+url.PathEscape(uid)+"/permissions", nil)
+	if err != nil {
+		return nil, err
+	}
+	return c.requestJSON(ctx, http.MethodPost, u, req)
+}
+
+func (c *Client) FolderPermissions(ctx context.Context, uid string) (any, error) {
+	if strings.TrimSpace(c.cfg.BaseURL) == "" {
+		return nil, ErrMissingBaseURL
+	}
+	u, err := joinURL(c.cfg.BaseURL, "/api/folders/"+url.PathEscape(uid)+"/permissions", nil)
+	if err != nil {
+		return nil, err
+	}
+	return c.requestJSON(ctx, http.MethodGet, u, nil)
+}
+
+func (c *Client) UpdateFolderPermissions(ctx context.Context, uid string, req PermissionUpdateRequest) (any, error) {
+	if strings.TrimSpace(c.cfg.BaseURL) == "" {
+		return nil, ErrMissingBaseURL
+	}
+	u, err := joinURL(c.cfg.BaseURL, "/api/folders/"+url.PathEscape(uid)+"/permissions", nil)
+	if err != nil {
+		return nil, err
+	}
+	return c.requestJSON(ctx, http.MethodPost, u, req)
 }
 
 func (c *Client) AssistantChat(ctx context.Context, prompt, chatID string) (any, error) {

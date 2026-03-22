@@ -67,7 +67,10 @@ func (s passthroughDatasourceStrategy) Examples() []string {
 	return []string{"grafana datasources " + s.family.Name + " query --uid " + s.family.Name + `-uid --query-json '` + s.family.ExampleQueryJSON + `'`}
 }
 
-func (s passthroughDatasourceStrategy) BindFlags(_ *flag.FlagSet, _ *datasourceQueryOptions) {}
+func (s passthroughDatasourceStrategy) BindFlags(fs *flag.FlagSet, opts *datasourceQueryOptions) {
+	_ = fs
+	_ = opts
+}
 
 func (s passthroughDatasourceStrategy) BuildQueries(opts datasourceQueryOptions, resolved resolvedDatasource) ([]map[string]any, error) {
 	return buildDatasourceQueries(resolved.UID, resolved.Type, opts.RefID, opts.IntervalMS, opts.MaxDataPoints, strings.TrimSpace(opts.QueryJSON), strings.TrimSpace(opts.QueriesJSON))

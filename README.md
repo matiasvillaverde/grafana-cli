@@ -38,6 +38,11 @@ grafana dashboards list --query latency --tag prod
 grafana datasources get --uid mysql-uid
 grafana datasources health --uid mysql-uid
 
+# Inspect or replace dashboard and folder permissions
+grafana dashboards permissions get --uid incident-overview
+grafana --yes dashboards permissions update --uid incident-overview --items-json '[{"role":"Viewer","permission":1}]'
+grafana folders permissions get --uid ops
+
 # List datasource capabilities without losing the raw Grafana payload
 grafana datasources list --type prometheus
 
@@ -149,6 +154,8 @@ export PATH="$PATH:$(go env GOPATH)/bin"
 | `dashboards versions --uid ...` | List dashboard version history |
 | `dashboards render --uid ...` | Render a dashboard or panel to PNG |
 | `dashboards share --uid ...` | Create a short share URL for a dashboard or panel |
+| `dashboards permissions get --uid ...` | Get permissions for one dashboard |
+| `dashboards permissions update --uid ...` | Replace dashboard permissions from a JSON array |
 | `datasources list` | List datasources with optional type/name filtering |
 | `datasources get --uid ...` | Get one datasource by UID |
 | `datasources health --uid ...` | Run a datasource health check |
@@ -165,6 +172,8 @@ export PATH="$PATH:$(go env GOPATH)/bin"
 |---------|-------------|
 | `folders list` | List dashboard folders |
 | `folders get --uid ...` | Get one folder by UID |
+| `folders permissions get --uid ...` | Get permissions for one folder |
+| `folders permissions update --uid ...` | Replace folder permissions from a JSON array |
 | `annotations list` | List annotations for a dashboard or panel |
 | `alerting rules list` | List alert rules |
 | `alerting contact-points list` | List alert contact points |
