@@ -10,12 +10,6 @@ stdout '"title":"Integration Folder"'
 exec grafana folders get --uid integration-folder-$GRAFANA_ITEST_RUN_ID
 stdout '"title":"Integration Folder"'
 
-exec sh -c 'grafana dashboards permissions update --yes --uid home --items-json "[{\"role\":\"Viewer\",\"permission\":1}]"'
-stdout '"message"'
-
-exec grafana dashboards permissions get --uid home
-stdout '"permission":1'
-
 exec sh -c 'grafana folders permissions update --yes --uid integration-folder-$GRAFANA_ITEST_RUN_ID --items-json "[{\"role\":\"Editor\",\"permission\":2}]"'
 stdout '"message"'
 
@@ -24,6 +18,12 @@ stdout '"permission":2'
 
 exec sh -c 'body=$(sed "s/__RUN_ID__/$GRAFANA_ITEST_RUN_ID/g" dashboard.json); grafana api POST /api/dashboards/db --yes --body "$body"'
 stdout '"uid":"integration-annotated-'
+
+exec sh -c 'grafana dashboards permissions update --yes --uid integration-annotated-$GRAFANA_ITEST_RUN_ID --items-json "[{\"role\":\"Viewer\",\"permission\":1}]"'
+stdout '"message"'
+
+exec grafana dashboards permissions get --uid integration-annotated-$GRAFANA_ITEST_RUN_ID
+stdout '"permission":1'
 
 exec sh -c 'now=$(date +%s000); grafana api POST /api/annotations --yes --body "{\"dashboardUID\":\"integration-annotated-$GRAFANA_ITEST_RUN_ID\",\"panelId\":1,\"time\":${now},\"tags\":[\"integration\",\"error\"],\"text\":\"integration annotation\"}"'
 stdout '"message":"Annotation added"'
