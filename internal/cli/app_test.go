@@ -187,130 +187,138 @@ func (f *fakeContextStore) SaveContext(name string, cfg config.Config) error {
 }
 
 type fakeClient struct {
-	rawResult            any
-	rawErr               error
-	rawResponses         map[string]any
-	rawErrors            map[string]error
-	rawMethod            string
-	rawPath              string
-	rawBody              any
-	rawCalls             []string
-	createShortURLResp   any
-	createShortURLErr    error
-	createShortURLReq    grafana.ShortURLRequest
-	cloudResult          any
-	cloudErr             error
-	cloudStackSlug       string
-	cloudStackDSResult   any
-	cloudStackDSErr      error
-	cloudStackConn       any
-	cloudStackConnErr    error
-	cloudStackPlugins    any
-	cloudStackPluginsErr error
-	cloudStackPluginReq  grafana.CloudStackPluginListRequest
-	cloudStackPluginPage map[string]any
-	cloudStackPluginID   string
-	cloudStackPlugin     any
-	cloudStackPluginErr  error
-	cloudBillingReq      grafana.CloudBilledUsageRequest
-	cloudBillingResp     any
-	cloudBillingErr      error
-	cloudAccessResult    any
-	cloudAccessPages     map[string]any
-	cloudAccessErr       error
-	cloudAccessReq       grafana.CloudAccessPolicyListRequest
-	cloudAccessOne       any
-	cloudAccessOneErr    error
-	cloudAccessID        string
-	cloudAccessRegion    string
-	searchDashResult     any
-	searchDashErr        error
-	getDashResult        any
-	getDashErr           error
-	createDashResult     any
-	createDashErr        error
-	deleteDashResult     any
-	deleteDashErr        error
-	dashVersionsResult   any
-	dashVersionsErr      error
-	renderDashboardResp  grafana.RenderedDashboard
-	renderDashboardErr   error
-	renderDashboardReq   grafana.DashboardRenderRequest
-	listDSResult         any
-	listDSErr            error
-	getDSResult          any
-	getDSErr             error
-	getDSUID             string
-	dsHealthResult       any
-	dsHealthErr          error
-	dsHealthUID          string
-	dsResourceResult     any
-	dsResourceErr        error
-	dsResourceMethod     string
-	dsResourceUID        string
-	dsResourcePath       string
-	dsResourceBody       any
-	dsQueryResult        any
-	dsQueryErr           error
-	dsQueryReq           grafana.DatasourceQueryRequest
-	listFoldersResult    any
-	listFoldersErr       error
-	getFolderResult      any
-	getFolderErr         error
-	serviceAccountsResp  any
-	serviceAccountsErr   error
-	serviceAccountsReq   grafana.ServiceAccountListRequest
-	serviceAccountResp   any
-	serviceAccountErr    error
-	serviceAccountID     int64
-	annotationsResult    any
-	annotationsErr       error
-	annotationsReq       grafana.AnnotationListRequest
-	alertRulesResult     any
-	alertRulesErr        error
-	alertContactResult   any
-	alertContactErr      error
-	alertPoliciesResult  any
-	alertPoliciesErr     error
-	assistantChatResult  any
-	assistantChatErr     error
-	assistantStatusResp  any
-	assistantStatusErr   error
-	assistantSkillsResp  any
-	assistantSkillsErr   error
-	assistantPrompt      string
-	assistantChatID      string
-	assistantStatusID    string
-	metricsResult        any
-	metricsErr           error
-	metricsExpr          string
-	metricsStart         string
-	metricsEnd           string
-	metricsStep          string
-	logsResult           any
-	logsErr              error
-	logsQuery            string
-	logsStart            string
-	logsEnd              string
-	logsLimit            int
-	tracesResult         any
-	tracesErr            error
-	tracesQuery          string
-	tracesStart          string
-	tracesEnd            string
-	tracesLimit          int
-	syntheticChecksResp  any
-	syntheticChecksErr   error
-	syntheticChecksReq   grafana.SyntheticCheckListRequest
-	syntheticCheckResp   any
-	syntheticCheckErr    error
-	syntheticCheckReq    grafana.SyntheticCheckGetRequest
-	aggregateResult      grafana.AggregateSnapshot
-	aggregateErr         error
-	aggregateReq         grafana.AggregateRequest
-	createDashboardArg   map[string]any
-	createFolderID       int64
-	createOverwrite      bool
+	rawResult             any
+	rawErr                error
+	rawResponses          map[string]any
+	rawErrors             map[string]error
+	rawMethod             string
+	rawPath               string
+	rawBody               any
+	rawCalls              []string
+	createShortURLResp    any
+	createShortURLErr     error
+	createShortURLReq     grafana.ShortURLRequest
+	cloudResult           any
+	cloudErr              error
+	cloudStackSlug        string
+	cloudStackDSResult    any
+	cloudStackDSErr       error
+	cloudStackConn        any
+	cloudStackConnErr     error
+	cloudStackPlugins     any
+	cloudStackPluginsErr  error
+	cloudStackPluginReq   grafana.CloudStackPluginListRequest
+	cloudStackPluginPage  map[string]any
+	cloudStackPluginID    string
+	cloudStackPlugin      any
+	cloudStackPluginErr   error
+	cloudBillingReq       grafana.CloudBilledUsageRequest
+	cloudBillingResp      any
+	cloudBillingErr       error
+	cloudAccessResult     any
+	cloudAccessPages      map[string]any
+	cloudAccessErr        error
+	cloudAccessReq        grafana.CloudAccessPolicyListRequest
+	cloudAccessOne        any
+	cloudAccessOneErr     error
+	cloudAccessID         string
+	cloudAccessRegion     string
+	searchDashResult      any
+	searchDashErr         error
+	getDashResult         any
+	getDashErr            error
+	createDashResult      any
+	createDashErr         error
+	deleteDashResult      any
+	deleteDashErr         error
+	dashVersionsResult    any
+	dashVersionsErr       error
+	dashPermissionsResp   any
+	dashPermissionsErr    error
+	dashPermissionsUID    string
+	dashPermissionsReq    grafana.PermissionUpdateRequest
+	renderDashboardResp   grafana.RenderedDashboard
+	renderDashboardErr    error
+	renderDashboardReq    grafana.DashboardRenderRequest
+	listDSResult          any
+	listDSErr             error
+	getDSResult           any
+	getDSErr              error
+	getDSUID              string
+	dsHealthResult        any
+	dsHealthErr           error
+	dsHealthUID           string
+	dsResourceResult      any
+	dsResourceErr         error
+	dsResourceMethod      string
+	dsResourceUID         string
+	dsResourcePath        string
+	dsResourceBody        any
+	dsQueryResult         any
+	dsQueryErr            error
+	dsQueryReq            grafana.DatasourceQueryRequest
+	listFoldersResult     any
+	listFoldersErr        error
+	getFolderResult       any
+	getFolderErr          error
+	folderPermissionsResp any
+	folderPermissionsErr  error
+	folderPermissionsUID  string
+	folderPermissionsReq  grafana.PermissionUpdateRequest
+	serviceAccountsResp   any
+	serviceAccountsErr    error
+	serviceAccountsReq    grafana.ServiceAccountListRequest
+	serviceAccountResp    any
+	serviceAccountErr     error
+	serviceAccountID      int64
+	annotationsResult     any
+	annotationsErr        error
+	annotationsReq        grafana.AnnotationListRequest
+	alertRulesResult      any
+	alertRulesErr         error
+	alertContactResult    any
+	alertContactErr       error
+	alertPoliciesResult   any
+	alertPoliciesErr      error
+	assistantChatResult   any
+	assistantChatErr      error
+	assistantStatusResp   any
+	assistantStatusErr    error
+	assistantSkillsResp   any
+	assistantSkillsErr    error
+	assistantPrompt       string
+	assistantChatID       string
+	assistantStatusID     string
+	metricsResult         any
+	metricsErr            error
+	metricsExpr           string
+	metricsStart          string
+	metricsEnd            string
+	metricsStep           string
+	logsResult            any
+	logsErr               error
+	logsQuery             string
+	logsStart             string
+	logsEnd               string
+	logsLimit             int
+	tracesResult          any
+	tracesErr             error
+	tracesQuery           string
+	tracesStart           string
+	tracesEnd             string
+	tracesLimit           int
+	syntheticChecksResp   any
+	syntheticChecksErr    error
+	syntheticChecksReq    grafana.SyntheticCheckListRequest
+	syntheticCheckResp    any
+	syntheticCheckErr     error
+	syntheticCheckReq     grafana.SyntheticCheckGetRequest
+	aggregateResult       grafana.AggregateSnapshot
+	aggregateErr          error
+	aggregateReq          grafana.AggregateRequest
+	createDashboardArg    map[string]any
+	createFolderID        int64
+	createOverwrite       bool
 }
 
 func (f *fakeClient) Raw(_ context.Context, method, path string, body any) (any, error) {
@@ -416,6 +424,17 @@ func (f *fakeClient) DashboardVersions(_ context.Context, _ string, _ int) (any,
 	return f.dashVersionsResult, f.dashVersionsErr
 }
 
+func (f *fakeClient) DashboardPermissions(_ context.Context, uid string) (any, error) {
+	f.dashPermissionsUID = uid
+	return f.dashPermissionsResp, f.dashPermissionsErr
+}
+
+func (f *fakeClient) UpdateDashboardPermissions(_ context.Context, uid string, req grafana.PermissionUpdateRequest) (any, error) {
+	f.dashPermissionsUID = uid
+	f.dashPermissionsReq = req
+	return f.dashPermissionsResp, f.dashPermissionsErr
+}
+
 func (f *fakeClient) RenderDashboard(_ context.Context, req grafana.DashboardRenderRequest) (grafana.RenderedDashboard, error) {
 	f.renderDashboardReq = req
 	return f.renderDashboardResp, f.renderDashboardErr
@@ -454,6 +473,17 @@ func (f *fakeClient) ListFolders(_ context.Context) (any, error) {
 
 func (f *fakeClient) GetFolder(_ context.Context, _ string) (any, error) {
 	return f.getFolderResult, f.getFolderErr
+}
+
+func (f *fakeClient) FolderPermissions(_ context.Context, uid string) (any, error) {
+	f.folderPermissionsUID = uid
+	return f.folderPermissionsResp, f.folderPermissionsErr
+}
+
+func (f *fakeClient) UpdateFolderPermissions(_ context.Context, uid string, req grafana.PermissionUpdateRequest) (any, error) {
+	f.folderPermissionsUID = uid
+	f.folderPermissionsReq = req
+	return f.folderPermissionsResp, f.folderPermissionsErr
 }
 
 func (f *fakeClient) ServiceAccounts(_ context.Context, req grafana.ServiceAccountListRequest) (any, error) {
@@ -1300,16 +1330,18 @@ func TestCloudStacksInspectWarningsAndHelp(t *testing.T) {
 func TestDashboardFolderAnnotationAndAlertingCommands(t *testing.T) {
 	store := &fakeStore{cfg: config.Config{Token: "token", BaseURL: "https://grafana.example"}}
 	client := &fakeClient{
-		getDashResult:       map[string]any{"dashboard": map[string]any{"uid": "ops"}},
-		deleteDashResult:    map[string]any{"status": "deleted"},
-		dashVersionsResult:  []any{map[string]any{"version": 1}},
-		renderDashboardResp: grafana.RenderedDashboard{Data: []byte("png-bytes"), ContentType: "image/png", Endpoint: "https://stack/render/d/ops/render", Bytes: 9},
-		listFoldersResult:   []any{map[string]any{"uid": "root"}},
-		getFolderResult:     map[string]any{"uid": "ops"},
-		annotationsResult:   []any{map[string]any{"id": 1}},
-		alertRulesResult:    []any{map[string]any{"uid": "rule-1"}},
-		alertContactResult:  []any{map[string]any{"name": "pagerduty"}},
-		alertPoliciesResult: map[string]any{"receiver": "default"},
+		getDashResult:         map[string]any{"dashboard": map[string]any{"uid": "ops"}},
+		deleteDashResult:      map[string]any{"status": "deleted"},
+		dashVersionsResult:    []any{map[string]any{"version": 1}},
+		dashPermissionsResp:   []any{map[string]any{"role": "Viewer", "permission": 1}},
+		renderDashboardResp:   grafana.RenderedDashboard{Data: []byte("png-bytes"), ContentType: "image/png", Endpoint: "https://stack/render/d/ops/render", Bytes: 9},
+		listFoldersResult:     []any{map[string]any{"uid": "root"}},
+		getFolderResult:       map[string]any{"uid": "ops"},
+		folderPermissionsResp: []any{map[string]any{"teamId": 7, "permission": 2}},
+		annotationsResult:     []any{map[string]any{"id": 1}},
+		alertRulesResult:      []any{map[string]any{"uid": "rule-1"}},
+		alertContactResult:    []any{map[string]any{"name": "pagerduty"}},
+		alertPoliciesResult:   map[string]any{"receiver": "default"},
 	}
 	app, out, errOut := newTestApp(store, client)
 
@@ -1338,6 +1370,30 @@ func TestDashboardFolderAnnotationAndAlertingCommands(t *testing.T) {
 	}
 	if len(versions) != 1 || versions[0]["version"] != float64(1) {
 		t.Fatalf("unexpected dashboard versions output: %+v", versions)
+	}
+
+	out.Reset()
+	if code := app.Run(context.Background(), []string{"dashboards", "permissions", "get", "--uid", "ops"}); code != 0 {
+		t.Fatalf("dashboard permissions get should succeed")
+	}
+	permissions := make([]map[string]any, 0)
+	if err := json.Unmarshal([]byte(out.String()), &permissions); err != nil {
+		t.Fatalf("unexpected dashboard permissions JSON: %v", err)
+	}
+	if len(permissions) != 1 || permissions[0]["role"] != "Viewer" || client.dashPermissionsUID != "ops" {
+		t.Fatalf("unexpected dashboard permissions output: %+v req=%q", permissions, client.dashPermissionsUID)
+	}
+
+	client.dashPermissionsResp = map[string]any{"message": "dashboard permissions updated"}
+	out.Reset()
+	if code := app.Run(context.Background(), []string{"--yes", "dashboards", "permissions", "update", "--uid", "ops", "--items-json", `[{"role":"Viewer","permission":1},{"teamId":7,"permission":2},{"userId":11,"permission":4}]`}); code != 0 {
+		t.Fatalf("dashboard permissions update should succeed: %s", errOut.String())
+	}
+	if decodeJSON(t, out.String())["message"] != "dashboard permissions updated" {
+		t.Fatalf("unexpected dashboard permissions update output: %+v", decodeJSON(t, out.String()))
+	}
+	if client.dashPermissionsUID != "ops" || len(client.dashPermissionsReq.Items) != 3 || client.dashPermissionsReq.Items[1].TeamID != 7 || client.dashPermissionsReq.Items[2].UserID != 11 {
+		t.Fatalf("unexpected dashboard permissions update request: %+v uid=%q", client.dashPermissionsReq, client.dashPermissionsUID)
 	}
 
 	renderPath := filepath.Join(t.TempDir(), "renders", "ops.png")
@@ -1453,6 +1509,30 @@ func TestDashboardFolderAnnotationAndAlertingCommands(t *testing.T) {
 	}
 
 	out.Reset()
+	if code := app.Run(context.Background(), []string{"folders", "permissions", "get", "--uid", "ops"}); code != 0 {
+		t.Fatalf("folder permissions get should succeed")
+	}
+	permissions = make([]map[string]any, 0)
+	if err := json.Unmarshal([]byte(out.String()), &permissions); err != nil {
+		t.Fatalf("unexpected folder permissions JSON: %v", err)
+	}
+	if len(permissions) != 1 || permissions[0]["teamId"] != float64(7) || client.folderPermissionsUID != "ops" {
+		t.Fatalf("unexpected folder permissions output: %+v req=%q", permissions, client.folderPermissionsUID)
+	}
+
+	client.folderPermissionsResp = map[string]any{"message": "folder permissions updated"}
+	out.Reset()
+	if code := app.Run(context.Background(), []string{"--yes", "folders", "permissions", "update", "--uid", "ops", "--items-json", `[{"role":"Editor","permission":2}]`}); code != 0 {
+		t.Fatalf("folder permissions update should succeed: %s", errOut.String())
+	}
+	if decodeJSON(t, out.String())["message"] != "folder permissions updated" {
+		t.Fatalf("unexpected folder permissions update output: %+v", decodeJSON(t, out.String()))
+	}
+	if client.folderPermissionsUID != "ops" || len(client.folderPermissionsReq.Items) != 1 || client.folderPermissionsReq.Items[0].Role != "Editor" {
+		t.Fatalf("unexpected folder permissions update request: %+v uid=%q", client.folderPermissionsReq, client.folderPermissionsUID)
+	}
+
+	out.Reset()
 	if code := app.Run(context.Background(), []string{"annotations", "list", "--dashboard-uid", "ops", "--panel-id", "4", "--limit", "20", "--from", "now-1h", "--to", "now", "--tags", "prod,error", "--type", "annotation"}); code != 0 {
 		t.Fatalf("annotations list should succeed")
 	}
@@ -1508,6 +1588,30 @@ func TestDashboardFolderAnnotationAndAlertingCommands(t *testing.T) {
 	if code := app.Run(context.Background(), []string{"dashboards", "versions"}); code != 1 {
 		t.Fatalf("dashboard versions missing uid should fail")
 	}
+	if code := app.Run(context.Background(), []string{"dashboards", "permissions", "get"}); code != 1 {
+		t.Fatalf("dashboard permissions get missing uid should fail")
+	}
+	if code := app.Run(context.Background(), []string{"--yes", "dashboards", "permissions", "update", "--uid", "ops"}); code != 1 {
+		t.Fatalf("dashboard permissions update missing items should fail")
+	}
+	if code := app.Run(context.Background(), []string{"--yes", "dashboards", "permissions", "update", "--items-json", `[]`}); code != 1 {
+		t.Fatalf("dashboard permissions update missing uid should fail")
+	}
+	if code := app.Run(context.Background(), []string{"--yes", "dashboards", "permissions", "update", "--uid", "ops", "--items-json", `{"role":"Viewer"}`}); code != 1 {
+		t.Fatalf("dashboard permissions update non-array json should fail")
+	}
+	if code := app.Run(context.Background(), []string{"--yes", "dashboards", "permissions", "update", "--uid", "ops", "--items-json", `[{]`}); code != 1 {
+		t.Fatalf("dashboard permissions update invalid json should fail")
+	}
+	if code := app.Run(context.Background(), []string{"--yes", "dashboards", "permissions", "update", "--uid", "ops", "--items-json", `[{"permission":1}]`}); code != 1 {
+		t.Fatalf("dashboard permissions update missing subject should fail")
+	}
+	if code := app.Run(context.Background(), []string{"--yes", "dashboards", "permissions", "update", "--uid", "ops", "--items-json", `[{"role":"Viewer","teamId":7,"permission":1}]`}); code != 1 {
+		t.Fatalf("dashboard permissions update multiple subjects should fail")
+	}
+	if code := app.Run(context.Background(), []string{"--yes", "dashboards", "permissions", "update", "--uid", "ops", "--items-json", `[{"role":"Viewer","permission":3}]`}); code != 1 {
+		t.Fatalf("dashboard permissions update invalid permission should fail")
+	}
 	if code := app.Run(context.Background(), []string{"dashboards", "render", "--uid", "ops"}); code != 1 {
 		t.Fatalf("dashboard render missing out should fail")
 	}
@@ -1525,6 +1629,12 @@ func TestDashboardFolderAnnotationAndAlertingCommands(t *testing.T) {
 	}
 	if code := app.Run(context.Background(), []string{"dashboards", "versions", "--bad"}); code != 1 {
 		t.Fatalf("dashboard versions parse should fail")
+	}
+	if code := app.Run(context.Background(), []string{"dashboards", "permissions", "get", "--bad"}); code != 1 {
+		t.Fatalf("dashboard permissions get parse should fail")
+	}
+	if code := app.Run(context.Background(), []string{"--yes", "dashboards", "permissions", "update", "--bad"}); code != 1 {
+		t.Fatalf("dashboard permissions update parse should fail")
 	}
 	if code := app.Run(context.Background(), []string{"dashboards", "render", "--bad"}); code != 1 {
 		t.Fatalf("dashboard render parse should fail")
@@ -1562,8 +1672,20 @@ func TestDashboardFolderAnnotationAndAlertingCommands(t *testing.T) {
 	if code := app.Run(context.Background(), []string{"folders", "get"}); code != 1 {
 		t.Fatalf("folders get missing uid should fail")
 	}
+	if code := app.Run(context.Background(), []string{"folders", "permissions", "get"}); code != 1 {
+		t.Fatalf("folders permissions get missing uid should fail")
+	}
+	if code := app.Run(context.Background(), []string{"--yes", "folders", "permissions", "update", "--uid", "ops"}); code != 1 {
+		t.Fatalf("folders permissions update missing items should fail")
+	}
 	if code := app.Run(context.Background(), []string{"folders", "get", "--bad"}); code != 1 {
 		t.Fatalf("folders get parse should fail")
+	}
+	if code := app.Run(context.Background(), []string{"folders", "permissions", "get", "--bad"}); code != 1 {
+		t.Fatalf("folders permissions get parse should fail")
+	}
+	if code := app.Run(context.Background(), []string{"--yes", "folders", "permissions", "update", "--bad"}); code != 1 {
+		t.Fatalf("folders permissions update parse should fail")
 	}
 	if code := app.Run(context.Background(), []string{"folders", "bad"}); code != 1 {
 		t.Fatalf("folders unknown command should fail")
@@ -2114,6 +2236,12 @@ func TestAuthDoctorPayloadAndReadOnly(t *testing.T) {
 	if err := enforceConfirmation([]string{"dashboards", "delete", "--help"}); err != nil {
 		t.Fatalf("expected help to bypass confirmation: %v", err)
 	}
+	if err := enforceConfirmation([]string{"dashboards", "permissions", "update", "--uid", "ops", "--items-json", "[]"}); err == nil {
+		t.Fatalf("expected dashboard permissions update confirmation")
+	}
+	if err := enforceConfirmation([]string{"folders", "permissions", "update", "--uid", "ops", "--items-json", "[]"}); err == nil {
+		t.Fatalf("expected folder permissions update confirmation")
+	}
 	if err := enforceReadOnly([]string{"api", "POST", "/api/test"}); err == nil {
 		t.Fatalf("expected read-only enforcement for api POST")
 	}
@@ -2141,6 +2269,20 @@ func TestAuthDoctorPayloadAndReadOnly(t *testing.T) {
 		t.Fatalf("expected read-only share error, got %q", errOut.String())
 	}
 	errOut.Reset()
+	if code := app.Run(context.Background(), []string{"--read-only", "--yes", "dashboards", "permissions", "update", "--uid", "ops", "--items-json", `[{"role":"Viewer","permission":1}]`}); code != 1 {
+		t.Fatalf("expected read-only dashboards permissions update failure")
+	}
+	if !strings.Contains(errOut.String(), "blocked by --read-only") {
+		t.Fatalf("expected read-only dashboard permissions error, got %q", errOut.String())
+	}
+	errOut.Reset()
+	if code := app.Run(context.Background(), []string{"--read-only", "--yes", "folders", "permissions", "update", "--uid", "ops", "--items-json", `[{"role":"Viewer","permission":1}]`}); code != 1 {
+		t.Fatalf("expected read-only folders permissions update failure")
+	}
+	if !strings.Contains(errOut.String(), "blocked by --read-only") {
+		t.Fatalf("expected read-only folder permissions error, got %q", errOut.String())
+	}
+	errOut.Reset()
 	if code := app.Run(context.Background(), []string{"--read-only", "api", "GET", "/api/test"}); code != 0 {
 		t.Fatalf("expected read-only api GET success, err=%q", errOut.String())
 	}
@@ -2150,6 +2292,20 @@ func TestAuthDoctorPayloadAndReadOnly(t *testing.T) {
 	}
 	if !strings.Contains(errOut.String(), "requires --yes") {
 		t.Fatalf("expected --yes error, got %q", errOut.String())
+	}
+	errOut.Reset()
+	if code := app.Run(context.Background(), []string{"dashboards", "permissions", "update", "--uid", "ops", "--items-json", `[{"role":"Viewer","permission":1}]`}); code != 1 {
+		t.Fatalf("expected confirmation failure for dashboard permissions update")
+	}
+	if !strings.Contains(errOut.String(), "requires --yes") {
+		t.Fatalf("expected --yes dashboard permissions error, got %q", errOut.String())
+	}
+	errOut.Reset()
+	if code := app.Run(context.Background(), []string{"folders", "permissions", "update", "--uid", "ops", "--items-json", `[{"role":"Viewer","permission":1}]`}); code != 1 {
+		t.Fatalf("expected confirmation failure for folder permissions update")
+	}
+	if !strings.Contains(errOut.String(), "requires --yes") {
+		t.Fatalf("expected --yes folder permissions error, got %q", errOut.String())
 	}
 }
 
@@ -3055,17 +3211,19 @@ func TestRequireAuthAndClientErrors(t *testing.T) {
 
 	store = &fakeStore{cfg: config.Config{Token: "x"}}
 	client = &fakeClient{
-		createShortURLErr:  errors.New("share fail"),
-		getDashErr:         errors.New("get dash fail"),
-		deleteDashErr:      errors.New("delete dash fail"),
-		dashVersionsErr:    errors.New("versions fail"),
-		renderDashboardErr: errors.New("render fail"),
-		listFoldersErr:     errors.New("folders fail"),
-		getFolderErr:       errors.New("folder fail"),
-		annotationsErr:     errors.New("annotations fail"),
-		alertRulesErr:      errors.New("alert rules fail"),
-		alertContactErr:    errors.New("alert contact fail"),
-		alertPoliciesErr:   errors.New("alert policies fail"),
+		createShortURLErr:    errors.New("share fail"),
+		getDashErr:           errors.New("get dash fail"),
+		deleteDashErr:        errors.New("delete dash fail"),
+		dashVersionsErr:      errors.New("versions fail"),
+		dashPermissionsErr:   errors.New("dashboard permissions fail"),
+		renderDashboardErr:   errors.New("render fail"),
+		listFoldersErr:       errors.New("folders fail"),
+		getFolderErr:         errors.New("folder fail"),
+		folderPermissionsErr: errors.New("folder permissions fail"),
+		annotationsErr:       errors.New("annotations fail"),
+		alertRulesErr:        errors.New("alert rules fail"),
+		alertContactErr:      errors.New("alert contact fail"),
+		alertPoliciesErr:     errors.New("alert policies fail"),
 	}
 	app, _, _ = newTestApp(store, client)
 	if code := app.Run(context.Background(), []string{"dashboards", "get", "--uid", "ops"}); code != 1 {
@@ -3076,6 +3234,12 @@ func TestRequireAuthAndClientErrors(t *testing.T) {
 	}
 	if code := app.Run(context.Background(), []string{"dashboards", "versions", "--uid", "ops"}); code != 1 {
 		t.Fatalf("expected dashboard versions client failure")
+	}
+	if code := app.Run(context.Background(), []string{"dashboards", "permissions", "get", "--uid", "ops"}); code != 1 {
+		t.Fatalf("expected dashboard permissions get client failure")
+	}
+	if code := app.Run(context.Background(), []string{"--yes", "dashboards", "permissions", "update", "--uid", "ops", "--items-json", `[{"role":"Viewer","permission":1}]`}); code != 1 {
+		t.Fatalf("expected dashboard permissions update client failure")
 	}
 	if code := app.Run(context.Background(), []string{"dashboards", "render", "--uid", "ops", "--out", filepath.Join(t.TempDir(), "x.png")}); code != 1 {
 		t.Fatalf("expected dashboard render client failure")
@@ -3088,6 +3252,12 @@ func TestRequireAuthAndClientErrors(t *testing.T) {
 	}
 	if code := app.Run(context.Background(), []string{"folders", "get", "--uid", "ops"}); code != 1 {
 		t.Fatalf("expected folder get client failure")
+	}
+	if code := app.Run(context.Background(), []string{"folders", "permissions", "get", "--uid", "ops"}); code != 1 {
+		t.Fatalf("expected folder permissions get client failure")
+	}
+	if code := app.Run(context.Background(), []string{"--yes", "folders", "permissions", "update", "--uid", "ops", "--items-json", `[{"role":"Viewer","permission":1}]`}); code != 1 {
+		t.Fatalf("expected folder permissions update client failure")
 	}
 	if code := app.Run(context.Background(), []string{"annotations", "list"}); code != 1 {
 		t.Fatalf("expected annotations client failure")

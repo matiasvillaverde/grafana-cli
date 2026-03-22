@@ -43,6 +43,8 @@ type APIClient interface {
 	DashboardVersions(ctx context.Context, uid string, limit int) (any, error)
 	RenderDashboard(ctx context.Context, req grafana.DashboardRenderRequest) (grafana.RenderedDashboard, error)
 	CreateShortURL(ctx context.Context, req grafana.ShortURLRequest) (any, error)
+	DashboardPermissions(ctx context.Context, uid string) (any, error)
+	UpdateDashboardPermissions(ctx context.Context, uid string, req grafana.PermissionUpdateRequest) (any, error)
 	ListDatasources(ctx context.Context) (any, error)
 	GetDatasource(ctx context.Context, uid string) (any, error)
 	DatasourceHealth(ctx context.Context, uid string) (any, error)
@@ -50,6 +52,8 @@ type APIClient interface {
 	DatasourceQuery(ctx context.Context, req grafana.DatasourceQueryRequest) (any, error)
 	ListFolders(ctx context.Context) (any, error)
 	GetFolder(ctx context.Context, uid string) (any, error)
+	FolderPermissions(ctx context.Context, uid string) (any, error)
+	UpdateFolderPermissions(ctx context.Context, uid string, req grafana.PermissionUpdateRequest) (any, error)
 	ServiceAccounts(ctx context.Context, req grafana.ServiceAccountListRequest) (any, error)
 	ServiceAccount(ctx context.Context, id int64) (any, error)
 	ListAnnotations(ctx context.Context, req grafana.AnnotationListRequest) (any, error)
@@ -678,8 +682,56 @@ func (a *App) runDashboards(ctx context.Context, opts globalOptions, args []stri
 			}
 		}
 		return a.emit(opts, enriched)
+	case "permissions":
+		return a.runDashboardPermissions(ctx, opts, client, args[1:])
 	default:
 		return fmt.Errorf("unknown dashboards command: %s", args[0])
+	}
+}
+
+func (a *App) runDashboardPermissions(ctx context.Context, opts globalOptions, client APIClient, args []string) error {
+	if len(args) == 0 || isHelpArg(args[0]) {
+		return a.emitHelp(opts, []string{"dashboards", "permissions"}, true)
+	}
+
+	switch args[0] {
+	case "get":
+		fs := flag.NewFlagSet("dashboards permissions get", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		uid := fs.String("uid", "", "dashboard UID")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if strings.TrimSpace(*uid) == "" {
+			return errors.New("--uid is required")
+		}
+		result, err := client.DashboardPermissions(ctx, *uid)
+		if err != nil {
+			return err
+		}
+		return a.emit(opts, result)
+	case "update":
+		fs := flag.NewFlagSet("dashboards permissions update", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		uid := fs.String("uid", "", "dashboard UID")
+		itemsJSON := fs.String("items-json", "", "permissions items JSON array")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if strings.TrimSpace(*uid) == "" {
+			return errors.New("--uid is required")
+		}
+		items, err := parsePermissionItemsJSON(*itemsJSON)
+		if err != nil {
+			return err
+		}
+		result, err := client.UpdateDashboardPermissions(ctx, *uid, grafana.PermissionUpdateRequest{Items: items})
+		if err != nil {
+			return err
+		}
+		return a.emit(opts, result)
+	default:
+		return fmt.Errorf("unknown dashboards permissions command: %s", args[0])
 	}
 }
 
@@ -719,8 +771,56 @@ func (a *App) runFolders(ctx context.Context, opts globalOptions, args []string)
 			return err
 		}
 		return a.emit(opts, result)
+	case "permissions":
+		return a.runFolderPermissions(ctx, opts, client, args[1:])
 	default:
 		return fmt.Errorf("unknown folders command: %s", args[0])
+	}
+}
+
+func (a *App) runFolderPermissions(ctx context.Context, opts globalOptions, client APIClient, args []string) error {
+	if len(args) == 0 || isHelpArg(args[0]) {
+		return a.emitHelp(opts, []string{"folders", "permissions"}, true)
+	}
+
+	switch args[0] {
+	case "get":
+		fs := flag.NewFlagSet("folders permissions get", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		uid := fs.String("uid", "", "folder UID")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if strings.TrimSpace(*uid) == "" {
+			return errors.New("--uid is required")
+		}
+		result, err := client.FolderPermissions(ctx, *uid)
+		if err != nil {
+			return err
+		}
+		return a.emit(opts, result)
+	case "update":
+		fs := flag.NewFlagSet("folders permissions update", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		uid := fs.String("uid", "", "folder UID")
+		itemsJSON := fs.String("items-json", "", "permissions items JSON array")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if strings.TrimSpace(*uid) == "" {
+			return errors.New("--uid is required")
+		}
+		items, err := parsePermissionItemsJSON(*itemsJSON)
+		if err != nil {
+			return err
+		}
+		result, err := client.UpdateFolderPermissions(ctx, *uid, grafana.PermissionUpdateRequest{Items: items})
+		if err != nil {
+			return err
+		}
+		return a.emit(opts, result)
+	default:
+		return fmt.Errorf("unknown folders permissions command: %s", args[0])
 	}
 }
 
@@ -1631,6 +1731,10 @@ func enforceConfirmation(args []string) error {
 		return errors.New("requires --yes: auth logout clears stored credentials")
 	case "dashboards delete":
 		return errors.New("requires --yes: dashboards delete removes a dashboard")
+	case "dashboards permissions update":
+		return errors.New("requires --yes: dashboards permissions update replaces dashboard permissions")
+	case "folders permissions update":
+		return errors.New("requires --yes: folders permissions update replaces folder permissions")
 	default:
 		return nil
 	}
@@ -2316,6 +2420,43 @@ func resolveDashboardShareOrgID(ctx context.Context, client APIClient, cfg confi
 		return 0, errors.New("org ID is not configured and current org lookup did not return a valid id; pass --org-id or run `grafana config set org-id <id>`")
 	}
 	return int64(orgID), nil
+}
+
+func parsePermissionItemsJSON(value string) ([]grafana.PermissionUpdateItem, error) {
+	if strings.TrimSpace(value) == "" {
+		return nil, errors.New("--items-json is required")
+	}
+
+	var items []grafana.PermissionUpdateItem
+	if err := json.Unmarshal([]byte(value), &items); err != nil {
+		return nil, fmt.Errorf("invalid --items-json: %w", err)
+	}
+
+	for i, item := range items {
+		subjectCount := 0
+		if strings.TrimSpace(item.Role) != "" {
+			subjectCount++
+		}
+		if item.TeamID > 0 {
+			subjectCount++
+		}
+		if item.UserID > 0 {
+			subjectCount++
+		}
+		if subjectCount == 0 {
+			return nil, fmt.Errorf("invalid --items-json: item %d must include exactly one of role, teamId, or userId", i)
+		}
+		if subjectCount > 1 {
+			return nil, fmt.Errorf("invalid --items-json: item %d cannot include more than one of role, teamId, or userId", i)
+		}
+		switch item.Permission {
+		case 1, 2, 4:
+		default:
+			return nil, fmt.Errorf("invalid --items-json: item %d permission must be one of 1, 2, or 4", i)
+		}
+	}
+
+	return items, nil
 }
 
 func resolveShortURLAbsolute(baseURL, shortURL string) (string, bool) {
