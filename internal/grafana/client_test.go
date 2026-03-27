@@ -195,6 +195,44 @@ func TestPermissionMethods(t *testing.T) {
 	}
 }
 
+func TestClientSessionCookieAuth(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "" {
+			t.Fatalf("expected no Authorization header, got %q", r.Header.Get("Authorization"))
+		}
+		if r.Header.Get("Cookie") != "grafana_session=my-session" {
+			t.Fatalf("expected session cookie header, got %q", r.Header.Get("Cookie"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	client := NewClient(config.Config{BaseURL: srv.URL, SessionCookie: "my-session"}, srv.Client())
+	if _, err := client.Raw(context.Background(), http.MethodGet, "/api/test", nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestClientTokenTakesPrecedenceOverCookie(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer token" {
+			t.Fatalf("expected Bearer auth, got %q", r.Header.Get("Authorization"))
+		}
+		if r.Header.Get("Cookie") != "" {
+			t.Fatalf("expected no Cookie header when token is present, got %q", r.Header.Get("Cookie"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	client := NewClient(config.Config{BaseURL: srv.URL, Token: "token", SessionCookie: "my-session"}, srv.Client())
+	if _, err := client.Raw(context.Background(), http.MethodGet, "/api/test", nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestHTTPErrorErrorString(t *testing.T) {
 	err := (&HTTPError{StatusCode: 500, Body: "boom"}).Error()
 	if !strings.Contains(err, "status=500") || !strings.Contains(err, "boom") {

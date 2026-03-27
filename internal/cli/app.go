@@ -230,6 +230,7 @@ func (a *App) runAuthLogin(ctx context.Context, opts globalOptions, args []strin
 	fs.SetOutput(io.Discard)
 
 	token := fs.String("token", "", "Grafana token")
+	sessionCookie := fs.String("session-cookie", "", "Grafana session cookie value (grafana_session) for cookie-based auth")
 	contextName := fs.String("context", "", "context name")
 	stack := fs.String("stack", "", "Grafana Cloud stack slug or https://<stack>.grafana.net URL")
 	cloudToken := fs.String("cloud-token", "", "Grafana Cloud API token used only for endpoint discovery")
@@ -244,8 +245,8 @@ func (a *App) runAuthLogin(ctx context.Context, opts globalOptions, args []strin
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if strings.TrimSpace(*token) == "" {
-		return errors.New("--token is required")
+	if strings.TrimSpace(*token) == "" && strings.TrimSpace(*sessionCookie) == "" {
+		return errors.New("--token or --session-cookie is required")
 	}
 
 	cfg, err := a.Store.Load()
@@ -254,6 +255,7 @@ func (a *App) runAuthLogin(ctx context.Context, opts globalOptions, args []strin
 	}
 
 	cfg.Token = strings.TrimSpace(*token)
+	cfg.SessionCookie = strings.TrimSpace(*sessionCookie)
 	warnings, err := a.resolveAuthEndpoints(ctx, &cfg, authLoginRequest{
 		Stack:      strings.TrimSpace(*stack),
 		CloudToken: strings.TrimSpace(*cloudToken),

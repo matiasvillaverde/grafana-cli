@@ -16,6 +16,9 @@ Agent-first CLI for Grafana and Grafana Cloud. Built for engineers working with 
 # Authenticate (--stack resolves Prometheus, Loki, and Tempo endpoints automatically)
 grafana auth login --token "$GRAFANA_TOKEN" --stack my-stack
 
+# Or authenticate with a browser session cookie (grafana_session)
+grafana auth login --session-cookie "$GRAFANA_SESSION" --base-url https://grafana.example.com
+
 # Check what's configured
 grafana auth doctor
 

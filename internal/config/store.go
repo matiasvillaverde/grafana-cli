@@ -16,15 +16,16 @@ const (
 
 // Config stores authentication and endpoint information for grafana-cli.
 type Config struct {
-	BaseURL       string `json:"base_url"`
-	CloudURL      string `json:"cloud_url"`
-	PrometheusURL string `json:"prometheus_url"`
-	LogsURL       string `json:"logs_url"`
-	TracesURL     string `json:"traces_url"`
-	OnCallURL     string `json:"oncall_url"`
-	Token         string `json:"token,omitempty"`
-	TokenBackend  string `json:"-"`
-	OrgID         int64  `json:"org_id"`
+	BaseURL        string `json:"base_url"`
+	CloudURL       string `json:"cloud_url"`
+	PrometheusURL  string `json:"prometheus_url"`
+	LogsURL        string `json:"logs_url"`
+	TracesURL      string `json:"traces_url"`
+	OnCallURL      string `json:"oncall_url"`
+	Token          string `json:"token,omitempty"`
+	SessionCookie  string `json:"session_cookie,omitempty"`
+	TokenBackend   string `json:"-"`
+	OrgID          int64  `json:"org_id"`
 }
 
 func (c *Config) ApplyDefaults() {
@@ -37,7 +38,7 @@ func (c *Config) ApplyDefaults() {
 }
 
 func (c Config) IsAuthenticated() bool {
-	return strings.TrimSpace(c.Token) != ""
+	return strings.TrimSpace(c.Token) != "" || strings.TrimSpace(c.SessionCookie) != ""
 }
 
 // Store persists CLI configuration.
@@ -75,6 +76,15 @@ func (s *FileStore) Path() string {
 }
 
 func (s *FileStore) Load() (Config, error) {
+	cfg, err := s.loadConfig()
+	if err != nil {
+		return Config{}, err
+	}
+	s.loadSessionCookie(&cfg)
+	return cfg, nil
+}
+
+func (s *FileStore) loadConfig() (Config, error) {
 	cfg := Config{}
 	data, err := os.ReadFile(s.path)
 	if err != nil {
@@ -124,12 +134,34 @@ func (s *FileStore) Load() (Config, error) {
 	return cfg, nil
 }
 
+func (s *FileStore) loadSessionCookie(cfg *Config) {
+	cookiePath := filepath.Join(filepath.Dir(s.path), "session_cookie")
+	data, err := os.ReadFile(cookiePath)
+	if err != nil {
+		return
+	}
+	if v := strings.TrimSpace(string(data)); v != "" {
+		cfg.SessionCookie = v
+	}
+}
+
 func (s *FileStore) Save(cfg Config) error {
 	cfg.ApplyDefaults()
-	if s.secret != nil {
+	if s.secret != nil && strings.TrimSpace(cfg.Token) != "" {
 		if _, err := s.secret.Save(cfg.Token); err != nil {
 			return err
 		}
+	}
+	cookiePath := filepath.Join(filepath.Dir(s.path), "session_cookie")
+	if strings.TrimSpace(cfg.SessionCookie) != "" {
+		if err := os.MkdirAll(filepath.Dir(cookiePath), 0o700); err != nil {
+			return err
+		}
+		if err := os.WriteFile(cookiePath, []byte(cfg.SessionCookie), 0o600); err != nil {
+			return err
+		}
+	} else {
+		_ = os.Remove(cookiePath)
 	}
 	return s.writeConfig(cfg)
 }
@@ -139,6 +171,8 @@ func (s *FileStore) Clear() error {
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
+	cookiePath := filepath.Join(filepath.Dir(s.path), "session_cookie")
+	_ = os.Remove(cookiePath)
 	if s.secret != nil {
 		return s.secret.Clear()
 	}
@@ -151,6 +185,7 @@ func (s *FileStore) writeConfig(cfg Config) error {
 	}
 	stored := cfg
 	stored.Token = ""
+	stored.SessionCookie = ""
 	stored.TokenBackend = ""
 	data, _ := json.MarshalIndent(stored, "", "  ")
 	return os.WriteFile(s.path, data, 0o600)
