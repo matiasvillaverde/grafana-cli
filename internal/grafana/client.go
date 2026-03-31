@@ -144,7 +144,7 @@ func (c *Client) CloudStacks(ctx context.Context) (any, error) {
 	return c.requestJSON(ctx, http.MethodGet, u, nil)
 }
 
-func (c *Client) SearchDashboards(ctx context.Context, query, tag string, limit int) (any, error) {
+func (c *Client) SearchDashboards(ctx context.Context, query, tag, folderUID string, limit int) (any, error) {
 	if strings.TrimSpace(c.cfg.BaseURL) == "" {
 		return nil, ErrMissingBaseURL
 	}
@@ -155,6 +155,9 @@ func (c *Client) SearchDashboards(ctx context.Context, query, tag string, limit 
 	}
 	if strings.TrimSpace(tag) != "" {
 		q.Set("tag", tag)
+	}
+	if strings.TrimSpace(folderUID) != "" {
+		q.Set("folderUIDs", folderUID)
 	}
 	if limit > 0 {
 		q.Set("limit", strconv.Itoa(limit))

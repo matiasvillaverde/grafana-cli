@@ -36,7 +36,7 @@ type APIClient interface {
 	CloudBilledUsage(ctx context.Context, req grafana.CloudBilledUsageRequest) (any, error)
 	CloudAccessPolicies(ctx context.Context, req grafana.CloudAccessPolicyListRequest) (any, error)
 	CloudAccessPolicy(ctx context.Context, id, region string) (any, error)
-	SearchDashboards(ctx context.Context, query, tag string, limit int) (any, error)
+	SearchDashboards(ctx context.Context, query, tag, folderUID string, limit int) (any, error)
 	GetDashboard(ctx context.Context, uid string) (any, error)
 	CreateDashboard(ctx context.Context, dashboard map[string]any, folderID int64, overwrite bool) (any, error)
 	DeleteDashboard(ctx context.Context, uid string) (any, error)
@@ -483,15 +483,16 @@ func (a *App) runDashboards(ctx context.Context, opts globalOptions, args []stri
 		fs.SetOutput(io.Discard)
 		query := fs.String("query", "", "search query")
 		tag := fs.String("tag", "", "tag filter")
+		folderUID := fs.String("folder-uid", "", "folder UID filter")
 		limit := fs.Int("limit", 100, "limit")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		result, err := client.SearchDashboards(ctx, *query, *tag, *limit)
+		result, err := client.SearchDashboards(ctx, *query, *tag, *folderUID, *limit)
 		if err != nil {
 			return err
 		}
-		return a.emitWithMetadata(opts, result, collectionMetadata("dashboards list", result, *limit, "Narrow --query or --tag, or raise --limit if you need more dashboards"))
+		return a.emitWithMetadata(opts, result, collectionMetadata("dashboards list", result, *limit, "Narrow --query, --tag, or --folder-uid, or raise --limit if you need more dashboards"))
 	case "get":
 		fs := flag.NewFlagSet("dashboards get", flag.ContinueOnError)
 		fs.SetOutput(io.Discard)

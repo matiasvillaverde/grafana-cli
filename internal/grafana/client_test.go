@@ -247,6 +247,9 @@ func TestClientDomainMethods(t *testing.T) {
 			if r.URL.Query().Get("q") == "" && r.URL.Query().Get("type") != "dash-db" {
 				t.Fatalf("missing type query")
 			}
+			if r.URL.Query().Get("type") == "dash-db" && r.URL.Query().Get("folderUIDs") != "ops" {
+				t.Fatalf("missing folder filter query: %s", r.URL.RawQuery)
+			}
 		}
 		if r.URL.Path == "/api/prom/api/v1/query_range" && r.URL.Query().Get("query") != "up" {
 			t.Fatalf("missing metrics query")
@@ -292,7 +295,7 @@ func TestClientDomainMethods(t *testing.T) {
 	if _, err := client.CloudAccessPolicy(context.Background(), "ap-1", "us"); err != nil {
 		t.Fatalf("cloud access policy failed: %v", err)
 	}
-	if _, err := client.SearchDashboards(context.Background(), "errors", "prod", 10); err != nil {
+	if _, err := client.SearchDashboards(context.Background(), "errors", "prod", "ops", 10); err != nil {
 		t.Fatalf("search dashboards failed: %v", err)
 	}
 	if _, err := client.CreateDashboard(context.Background(), map[string]any{"title": "x"}, 7, true); err != nil {
@@ -412,7 +415,7 @@ func TestClientMissingBaseURLPaths(t *testing.T) {
 	if _, err := client.CloudAccessPolicy(context.Background(), "ap-1", "us"); !errors.Is(err, ErrMissingBaseURL) {
 		t.Fatalf("expected ErrMissingBaseURL for cloud access policy, got %v", err)
 	}
-	if _, err := client.SearchDashboards(context.Background(), "", "", 0); !errors.Is(err, ErrMissingBaseURL) {
+	if _, err := client.SearchDashboards(context.Background(), "", "", "", 0); !errors.Is(err, ErrMissingBaseURL) {
 		t.Fatalf("expected ErrMissingBaseURL for search dashboards, got %v", err)
 	}
 	if _, err := client.CreateDashboard(context.Background(), map[string]any{"title": "x"}, 0, false); !errors.Is(err, ErrMissingBaseURL) {
@@ -539,7 +542,7 @@ func TestMethodInvalidURLBuildErrors(t *testing.T) {
 		return nil, errors.New("should not call")
 	})}
 
-	if _, err := client.SearchDashboards(context.Background(), "x", "y", 1); err == nil {
+	if _, err := client.SearchDashboards(context.Background(), "x", "y", "", 1); err == nil {
 		t.Fatalf("expected search dashboards URL error")
 	}
 	if _, err := client.CreateDashboard(context.Background(), map[string]any{"title": "x"}, 1, true); err == nil {
@@ -685,7 +688,7 @@ func TestMethodQueryParamBranches(t *testing.T) {
 		}, nil
 	}))
 
-	if _, err := client.SearchDashboards(context.Background(), "", "", 0); err != nil {
+	if _, err := client.SearchDashboards(context.Background(), "", "", "", 0); err != nil {
 		t.Fatalf("search dashboard failed: %v", err)
 	}
 	if _, err := client.CreateDashboard(context.Background(), map[string]any{"title": "x"}, 0, true); err != nil {

@@ -33,6 +33,7 @@ grafana synthetics checks list \
 
 # Search dashboards
 grafana dashboards list --query latency --tag prod
+grafana dashboards list --folder-uid ops
 
 # Inspect one datasource and its health
 grafana datasources get --uid mysql-uid
@@ -147,7 +148,7 @@ export PATH="$PATH:$(go env GOPATH)/bin"
 
 | Command | Description |
 |---------|-------------|
-| `dashboards list` | Search dashboards by query and tag |
+| `dashboards list` | Search dashboards by query, tag, or folder UID |
 | `dashboards get --uid ...` | Fetch one dashboard by UID |
 | `dashboards create` | Create a dashboard from flags or `--template-json` |
 | `dashboards delete --uid ...` | Delete a dashboard by UID |

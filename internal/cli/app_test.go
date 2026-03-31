@@ -225,6 +225,10 @@ type fakeClient struct {
 	cloudAccessRegion     string
 	searchDashResult      any
 	searchDashErr         error
+	searchDashQuery       string
+	searchDashTag         string
+	searchDashFolderUID   string
+	searchDashLimit       int
 	getDashResult         any
 	getDashErr            error
 	createDashResult      any
@@ -401,7 +405,11 @@ func (f *fakeClient) CloudAccessPolicy(_ context.Context, id, region string) (an
 	return f.cloudAccessOne, f.cloudAccessOneErr
 }
 
-func (f *fakeClient) SearchDashboards(_ context.Context, _, _ string, _ int) (any, error) {
+func (f *fakeClient) SearchDashboards(_ context.Context, query, tag, folderUID string, limit int) (any, error) {
+	f.searchDashQuery = query
+	f.searchDashTag = tag
+	f.searchDashFolderUID = folderUID
+	f.searchDashLimit = limit
 	return f.searchDashResult, f.searchDashErr
 }
 
@@ -1215,8 +1223,11 @@ func TestAPICloudDashboardDatasourceCommands(t *testing.T) {
 	client.cloudBillingErr = nil
 
 	out.Reset()
-	if code := app.Run(context.Background(), []string{"dashboards", "list", "--query", "err"}); code != 0 {
+	if code := app.Run(context.Background(), []string{"dashboards", "list", "--query", "err", "--folder-uid", "ops", "--limit", "5"}); code != 0 {
 		t.Fatalf("dashboard list should succeed")
+	}
+	if client.searchDashQuery != "err" || client.searchDashFolderUID != "ops" || client.searchDashLimit != 5 {
+		t.Fatalf("unexpected dashboard list request: query=%q folder=%q limit=%d", client.searchDashQuery, client.searchDashFolderUID, client.searchDashLimit)
 	}
 	if code := app.Run(context.Background(), []string{"dashboards", "list", "--bad"}); code != 1 {
 		t.Fatalf("dashboard list parse should fail")
