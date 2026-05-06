@@ -619,6 +619,8 @@ func (c *Client) requestBytesWithAuth(ctx context.Context, method, endpoint stri
 	}
 	if strings.TrimSpace(token) != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
+	} else if strings.TrimSpace(c.cfg.SessionCookie) != "" {
+		req.Header.Set("Cookie", "grafana_session="+c.cfg.SessionCookie)
 	}
 	if orgID > 0 {
 		req.Header.Set("X-Grafana-Org-Id", strconv.FormatInt(orgID, 10))

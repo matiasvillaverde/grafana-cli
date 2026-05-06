@@ -848,7 +848,7 @@ func TestAuthFlows(t *testing.T) {
 	if code := app.Run(context.Background(), []string{"auth", "login"}); code != 1 {
 		t.Fatalf("missing token should fail")
 	}
-	if !strings.Contains(errOut.String(), "--token is required") {
+	if !strings.Contains(errOut.String(), "--token or --session-cookie is required") {
 		t.Fatalf("expected token error")
 	}
 

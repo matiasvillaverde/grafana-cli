@@ -447,6 +447,134 @@ func TestFileStoreMigrationWriteConfigErrorAndClearWithoutSecret(t *testing.T) {
 	}
 }
 
+func TestIsAuthenticatedWithSessionCookie(t *testing.T) {
+	if !(Config{SessionCookie: "abc"}).IsAuthenticated() {
+		t.Fatalf("expected session cookie to authenticate")
+	}
+	if (Config{SessionCookie: "  "}).IsAuthenticated() {
+		t.Fatalf("expected whitespace-only session cookie to be unauthenticated")
+	}
+}
+
+func TestFileStoreSessionCookieRoundtrip(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "sub", "config.json")
+	store := NewFileStoreWithSecretStore(path, nil)
+
+	cfg := Config{
+		BaseURL:       "https://stack.grafana.net",
+		SessionCookie: "my-session-value",
+	}
+	if err := store.Save(cfg); err != nil {
+		t.Fatalf("save with session cookie failed: %v", err)
+	}
+
+	// Session cookie must be stored in a separate file, not in config.json.
+	configBytes, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read config failed: %v", err)
+	}
+	if strings.Contains(string(configBytes), "my-session-value") || strings.Contains(string(configBytes), "session_cookie") {
+		t.Fatalf("config file should not contain session cookie: %s", configBytes)
+	}
+
+	cookiePath := filepath.Join(tmp, "sub", "session_cookie")
+	cookieBytes, err := os.ReadFile(cookiePath)
+	if err != nil {
+		t.Fatalf("read session cookie file failed: %v", err)
+	}
+	if strings.TrimSpace(string(cookieBytes)) != "my-session-value" {
+		t.Fatalf("unexpected session cookie payload: %q", cookieBytes)
+	}
+
+	loaded, err := store.Load()
+	if err != nil {
+		t.Fatalf("load failed: %v", err)
+	}
+	if loaded.SessionCookie != "my-session-value" {
+		t.Fatalf("expected session cookie roundtrip, got %q", loaded.SessionCookie)
+	}
+
+	// Saving without a session cookie should remove the file.
+	cfg.SessionCookie = ""
+	if err := store.Save(cfg); err != nil {
+		t.Fatalf("save without session cookie failed: %v", err)
+	}
+	if _, err := os.Stat(cookiePath); !os.IsNotExist(err) {
+		t.Fatalf("expected session cookie file to be removed")
+	}
+
+	loaded, err = store.Load()
+	if err != nil {
+		t.Fatalf("load after clear failed: %v", err)
+	}
+	if loaded.SessionCookie != "" {
+		t.Fatalf("expected empty session cookie after removal, got %q", loaded.SessionCookie)
+	}
+}
+
+func TestFileStoreClearRemovesSessionCookie(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "config.json")
+	store := NewFileStoreWithSecretStore(path, nil)
+
+	if err := store.Save(Config{SessionCookie: "sess"}); err != nil {
+		t.Fatalf("save failed: %v", err)
+	}
+	cookiePath := filepath.Join(tmp, "session_cookie")
+	if _, err := os.Stat(cookiePath); err != nil {
+		t.Fatalf("expected session cookie file to exist: %v", err)
+	}
+
+	if err := store.Clear(); err != nil {
+		t.Fatalf("clear failed: %v", err)
+	}
+	if _, err := os.Stat(cookiePath); !os.IsNotExist(err) {
+		t.Fatalf("expected session cookie file to be removed after clear")
+	}
+}
+
+func TestFileStoreSaveTokenOnlyWhenPresent(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "config.json")
+	tokenPath := filepath.Join(tmp, "token")
+	store := NewFileStoreWithSecretStore(path, &chainSecretStore{
+		backends: []secretBackend{&fileSecretBackend{path: tokenPath}},
+	})
+
+	// Save with session cookie only (no token) should not call secret store save.
+	if err := store.Save(Config{SessionCookie: "sess"}); err != nil {
+		t.Fatalf("save with session cookie only failed: %v", err)
+	}
+	if _, err := os.Stat(tokenPath); !os.IsNotExist(err) {
+		t.Fatalf("expected no token file when only session cookie is set")
+	}
+}
+
+func TestFileStoreSessionCookieWriteErrors(t *testing.T) {
+	// MkdirAll error: parent path is a file, not a directory.
+	tmp := t.TempDir()
+	parentFile := filepath.Join(tmp, "parent-file")
+	if err := os.WriteFile(parentFile, []byte("x"), 0o600); err != nil {
+		t.Fatalf("write failed: %v", err)
+	}
+	store := NewFileStoreWithSecretStore(filepath.Join(parentFile, "sub", "config.json"), nil)
+	if err := store.Save(Config{SessionCookie: "sess"}); err == nil {
+		t.Fatalf("expected mkdir error for session cookie")
+	}
+
+	// WriteFile error: cookie path is a directory.
+	tmp2 := t.TempDir()
+	cookieDir := filepath.Join(tmp2, "session_cookie")
+	if err := os.MkdirAll(filepath.Join(cookieDir, "child"), 0o755); err != nil {
+		t.Fatalf("mkdir failed: %v", err)
+	}
+	store = NewFileStoreWithSecretStore(filepath.Join(tmp2, "config.json"), nil)
+	if err := store.Save(Config{SessionCookie: "sess"}); err == nil {
+		t.Fatalf("expected write error for session cookie")
+	}
+}
+
 func TestNewFileStoreUsesDefaultSecretStore(t *testing.T) {
 	store := NewFileStore(filepath.Join(t.TempDir(), "config.json"))
 	if store.secret == nil {
