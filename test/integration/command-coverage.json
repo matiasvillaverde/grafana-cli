@@ -111,6 +111,7 @@
         "assistant chat",
         "assistant investigate",
         "assistant status",
+        "assistant wait",
         "assistant skills",
         "synthetics checks list",
         "synthetics checks get"

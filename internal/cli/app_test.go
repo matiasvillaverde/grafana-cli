@@ -288,6 +288,7 @@ type fakeClient struct {
 	assistantChatErr      error
 	assistantStatusResp   any
 	assistantStatusErr    error
+	assistantStatusSeq    []any
 	assistantSkillsResp   any
 	assistantSkillsErr    error
 	assistantPrompt       string
@@ -529,6 +530,11 @@ func (f *fakeClient) AssistantChat(_ context.Context, prompt, chatID string) (an
 
 func (f *fakeClient) AssistantChatStatus(_ context.Context, chatID string) (any, error) {
 	f.assistantStatusID = chatID
+	if len(f.assistantStatusSeq) > 0 {
+		result := f.assistantStatusSeq[0]
+		f.assistantStatusSeq = f.assistantStatusSeq[1:]
+		return result, f.assistantStatusErr
+	}
 	return f.assistantStatusResp, f.assistantStatusErr
 }
 
@@ -2919,6 +2925,18 @@ func TestAssistantCommands(t *testing.T) {
 	}
 
 	out.Reset()
+	client.assistantStatusSeq = []any{
+		map[string]any{"status": "running"},
+		map[string]any{"status": "completed", "result": "done"},
+	}
+	if code := app.Run(context.Background(), []string{"assistant", "wait", "--chat-id", "c1", "--interval", "1ms", "--timeout", "1s"}); code != 0 {
+		t.Fatalf("assistant wait should succeed")
+	}
+	if decodeJSON(t, out.String())["status"] != "completed" {
+		t.Fatalf("unexpected assistant wait response: %s", out.String())
+	}
+
+	out.Reset()
 	if code := app.Run(context.Background(), []string{"assistant", "skills"}); code != 0 {
 		t.Fatalf("assistant skills should succeed")
 	}
@@ -2948,14 +2966,47 @@ func TestAssistantCommands(t *testing.T) {
 	if code := app.Run(context.Background(), []string{"assistant", "status"}); code != 1 {
 		t.Fatalf("assistant status missing chat id should fail")
 	}
+	if code := app.Run(context.Background(), []string{"assistant", "wait"}); code != 1 {
+		t.Fatalf("assistant wait missing chat id should fail")
+	}
+	if code := app.Run(context.Background(), []string{"assistant", "wait", "--chat-id", "c1", "--interval", "0s"}); code != 1 {
+		t.Fatalf("assistant wait invalid interval should fail")
+	}
+	if code := app.Run(context.Background(), []string{"assistant", "wait", "--chat-id", "c1", "--timeout", "0s"}); code != 1 {
+		t.Fatalf("assistant wait invalid timeout should fail")
+	}
 	if code := app.Run(context.Background(), []string{"assistant", "status", "--bad"}); code != 1 {
 		t.Fatalf("assistant status parse should fail")
+	}
+	if code := app.Run(context.Background(), []string{"assistant", "wait", "--bad"}); code != 1 {
+		t.Fatalf("assistant wait parse should fail")
 	}
 	if code := app.Run(context.Background(), []string{"assistant", "skills", "extra"}); code != 1 {
 		t.Fatalf("assistant skills usage should fail")
 	}
 	if code := app.Run(context.Background(), []string{"assistant", "bad"}); code != 1 {
 		t.Fatalf("assistant unknown command should fail")
+	}
+}
+
+func TestAssistantWaitTimeout(t *testing.T) {
+	store := &fakeStore{cfg: config.Config{Token: "token"}}
+	client := &fakeClient{
+		assistantStatusSeq: []any{
+			map[string]any{"status": "running"},
+			map[string]any{"status": "running"},
+		},
+	}
+	app, _, errOut := newTestApp(store, client)
+	current := time.Unix(0, 0)
+	app.Now = func() time.Time { return current }
+	app.Sleep = func(d time.Duration) { current = current.Add(d) }
+
+	if code := app.Run(context.Background(), []string{"assistant", "wait", "--chat-id", "c1", "--interval", "10ms", "--timeout", "10ms"}); code != 1 {
+		t.Fatalf("assistant wait timeout should fail")
+	}
+	if !strings.Contains(errOut.String(), "timed out") {
+		t.Fatalf("expected timeout error, got %q", errOut.String())
 	}
 }
 
@@ -3517,6 +3568,9 @@ func TestAppErrorBranches(t *testing.T) {
 	client.assistantStatusErr = errors.New("assistant status fail")
 	if code := app.Run(context.Background(), []string{"assistant", "status", "--chat-id", "c1"}); code != 1 {
 		t.Fatalf("expected assistant status client error")
+	}
+	if code := app.Run(context.Background(), []string{"assistant", "wait", "--chat-id", "c1"}); code != 1 {
+		t.Fatalf("expected assistant wait client error")
 	}
 	client.assistantStatusErr = nil
 	client.assistantSkillsErr = errors.New("assistant skills fail")

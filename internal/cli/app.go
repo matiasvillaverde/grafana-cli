@@ -92,6 +92,7 @@ type App struct {
 	Contexts  config.ContextStore
 	NewClient ClientFactory
 	Now       func() time.Time
+	Sleep     func(time.Duration)
 }
 
 func NewApp(store config.Store) *App {
@@ -102,7 +103,8 @@ func NewApp(store config.Store) *App {
 		NewClient: func(cfg config.Config) APIClient {
 			return grafana.NewClient(cfg, nil)
 		},
-		Now: time.Now,
+		Now:   time.Now,
+		Sleep: time.Sleep,
 	}
 	if contexts, ok := store.(config.ContextStore); ok {
 		app.Contexts = contexts
@@ -1054,6 +1056,39 @@ func (a *App) runAssistant(ctx context.Context, opts globalOptions, args []strin
 			return err
 		}
 		return a.emit(opts, result)
+	case "wait":
+		fs := flag.NewFlagSet("assistant wait", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		chatID := fs.String("chat-id", "", "chat ID")
+		interval := fs.Duration("interval", 2*time.Second, "poll interval")
+		timeout := fs.Duration("timeout", 30*time.Second, "maximum wait time")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if strings.TrimSpace(*chatID) == "" {
+			return errors.New("--chat-id is required")
+		}
+		if *interval <= 0 {
+			return errors.New("--interval must be > 0")
+		}
+		if *timeout <= 0 {
+			return errors.New("--timeout must be > 0")
+		}
+		deadline := a.Now().Add(*timeout)
+		for {
+			result, err := client.AssistantChatStatus(ctx, *chatID)
+			if err != nil {
+				return err
+			}
+			status := strings.ToLower(strings.TrimSpace(firstNonEmptyString(mapValue(result), "status", "state")))
+			if status == "" || status == "completed" || status == "failed" || status == "error" || status == "cancelled" {
+				return a.emitWithMetadata(opts, result, withCommandMetadata(nil, "assistant wait"))
+			}
+			if !a.Now().Before(deadline) {
+				return fmt.Errorf("assistant wait timed out after %s", timeout.String())
+			}
+			a.Sleep(*interval)
+		}
 	case "skills":
 		if len(args) != 1 {
 			return errors.New("usage: assistant skills")

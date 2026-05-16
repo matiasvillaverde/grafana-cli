@@ -230,6 +230,7 @@ Supported datasource families:
 | `assistant chat --prompt ...` | Send a prompt to Grafana Assistant |
 | `assistant investigate --goal ...` | Start an assistant-led investigation for an operational goal |
 | `assistant status --chat-id ...` | Poll assistant chat status |
+| `assistant wait --chat-id ...` | Wait for assistant chat completion by polling status |
 | `assistant skills` | List available assistant skills |
 
 </details>

@@ -7,6 +7,9 @@ stdout '"chatId":"chat-1"'
 exec grafana assistant status --chat-id chat-1
 stdout '"status":"completed"'
 
+exec grafana assistant wait --chat-id chat-1 --timeout 1s
+stdout '"status":"completed"'
+
 exec grafana assistant skills
 stdout '"Investigate incidents"'
 
